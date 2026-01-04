@@ -1,0 +1,27 @@
+# B-SOID Automated Pipeline Configuration
+
+# Input/Output
+input_dir: "/home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos"  # Will generally be overridden or used as default
+output_dir: "/home/isonaei/ABVFM/B-soid/results"
+bsoid_source_dir: "/home/isonaei/ABVFM/B-soid/source_code"
+
+# Video Processing
+fps: null  # If null, extract from video file
+
+# UMAP Parameters
+umap_params:
+  n_neighbors: 60
+  min_dist: 0.0
+  n_components: 3
+  random_state: 42
+
+# HDBSCAN Parameters
+hdbscan_params:
+  prediction_data: True
+  min_samples: 1  # Will often be set same as min_cluster_size
+
+# Optimization Parameters
+optimization:
+  min_cluster_size_range: [0.001, 0.01]  # 0.1% to 1.0%
+  min_duration_ms: 400
+  steps: 10  # Number of steps in the range to test

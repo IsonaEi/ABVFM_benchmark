@@ -1,0 +1,62 @@
+# Python & Environment
+__pycache__/
+*.py[cod]
+*$py.class
+venvs/
+.env
+.venv
+.ipynb_checkpoints/
+
+# OS Files
+.DS_Store
+.directory
+
+# Temporary Files
+Gemini_working_temp/
+
+# Data Directories (Root & Submodules)
+data/
+Keypoint_data/
+lable_data/
+B-soid/results/
+KPMS/results/
+KPMS/docs/build/
+Benchmark/keypoint_data/
+Benchmark/lable_data/
+
+# DeepLabCut Project Specifics
+# Ignore all large subfolders in DLC projects but keep the structure and config
+DLC/*/videos/
+DLC/*/labeled-data/
+DLC/*/training-datasets/
+DLC/*/evaluation-results/
+DLC/*/dlc-models/
+DLC/*/dlc-models-pytorch/
+DLC/*/temp/
+
+# Large Binary & Data File Extensions
+*.h5
+*.npy
+*.npz
+*.mat
+*.pickle
+*.pkl
+*.dat
+*.wav
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.gif
+*.jpg
+*.jpeg
+*.png
+# Model weights
+*.pt
+*.pth
+
+# Generic CSVs (often data) - If you have config CSVs, we might need to exception them
+*.csv
+
+# Exceptions (if any specific config files are needed that match above)
+# !important_config.csv

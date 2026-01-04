@@ -1,0 +1,2 @@
+[console_scripts]
+kpms = kpms_custom.core.cli:main

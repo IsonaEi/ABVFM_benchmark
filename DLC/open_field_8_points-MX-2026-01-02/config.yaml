@@ -1,0 +1,130 @@
+# Project definitions (do not edit)
+Task: open_field_8_points
+scorer: MX
+date: Jan2
+multianimalproject: false
+identity:
+
+
+# Project path (change when moving around)
+project_path: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02
+
+
+# Default DeepLabCut engine to use for shuffle creation (either pytorch or tensorflow)
+engine: pytorch
+
+
+# Annotation data set configuration (and individual video cropping parameters)
+video_sets:
+  /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos/ctrl_30fps.mp4:
+    crop: 0, 720, 0, 720
+  /home/isonaei/ABVFM/data/temp/ctrl_30fps.mp4:
+    crop: 0, 720, 0, 720
+bodyparts:
+- nose
+- head_midpoint
+- right_ear
+- left_ear
+- neck
+- mouse_center
+- mid_backend2
+- tail_base
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+
+
+# Fraction of video to start/stop when extracting frames for labeling/refinement
+start: 0
+stop: 1
+numframes2pick: 20
+
+
+# Plotting configuration
+skeleton:
+- - nose
+  - head_midpoint
+- - right_ear
+  - neck
+- - head_midpoint
+  - right_ear
+- - left_ear
+  - neck
+- - nose
+  - left_ear
+- - head_midpoint
+  - neck
+- - mid_backend2
+  - tail_base
+- - neck
+  - mouse_center
+- - nose
+  - right_ear
+- - mouse_center
+  - mid_backend2
+- - head_midpoint
+  - left_ear
+skeleton_color: green
+pcutoff: 0.9
+dotsize: 8
+alphavalue: 0.7
+colormap: rainbow
+
+
+# Training,Evaluation and Analysis configuration
+TrainingFraction:
+- 0.95
+iteration: 4
+default_net_type: resnet_50
+default_augmenter: default
+snapshotindex: -1
+detector_snapshotindex: -1
+batch_size: 8
+detector_batch_size: 8
+
+
+# Cropping Parameters (for analysis and outlier frame detection)
+cropping: false
+#if cropping is true for analysis, then set the values here:
+x1: 0
+x2: 640
+y1: 277
+y2: 624
+
+
+# Refinement configuration (parameters from annotation dataset configuration also relevant in this stage)
+corner2move2:
+- 50
+- 50
+move2corner: true
+
+
+# Conversion tables to fine-tune SuperAnimal weights
+SuperAnimalConversionTables:

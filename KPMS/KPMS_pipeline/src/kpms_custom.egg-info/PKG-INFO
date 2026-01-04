@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: kpms_custom
+Version: 0.1.0
+Requires-Python: >=3.9
+Requires-Dist: keypoint-moseq
+Requires-Dist: jax
+Requires-Dist: jaxlib
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Requires-Dist: seaborn
+Requires-Dist: plotly
+Requires-Dist: pyyaml
+Requires-Dist: opencv-python
+Requires-Dist: tqdm
+Dynamic: requires-dist
+Dynamic: requires-python

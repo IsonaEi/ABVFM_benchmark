@@ -1,0 +1,104 @@
+# KPMS Pipeline Configuration
+# Version: 2.0 (Refactored)
+
+# --- Project Paths ---
+# Where the Keypoint-MoSeq project structure will be created
+project_dir: /home/isonaei/ABVFM/KPMS/results/current_project
+# Where the input videos are located
+video_dir: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos
+# Where the pose data is (usually same as video_dir or separate)
+data_dir: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos
+
+# --- Project Settings ---
+project_config:
+  video_extension: mp4
+  bodyparts: AUTO  # or list [nose, left_ear, ...]
+
+# --- Preprocessing ---
+preprocess:
+  fps: 30.0
+  # Filter/interpolation settings can go here if we add them to preprocessor.py
+
+# --- Model Parameters ---
+model_params:
+  latent_dim: 0.9      # float < 1.0 for variance ratio, or int > 1 for component count
+  num_iters: 400       # Total iterations for full training
+  ar_warmup_iters: 50  # Iterations for AR-only warmup
+  seed: 42             # Random seed for reproducibility
+  added_noise_level: 1.0
+  
+  error_estimator:
+    intercept: 1.0
+    slope: -0.5
+
+  # Kappa Scan Settings
+  kappa_scan:
+    num_steps: 10
+    min: 1000.0
+    max: 1.0e+12
+    ar_iters: 50
+    full_iters: 75
+
+# --- Tuning / Hyperparameters ---
+tuning:
+  target_motif_duration: 400  # Target median duration in ms
+  tolerance: 0.1            # Acceptance tolerance (10%)
+  
+  # These are auto-updated by 'kpms scan'
+  # You can also set them manually
+  ar_kappa: 1000000
+  full_kappa: 70000
+  # Legacy support
+  full_kappa_ratio: none
+
+# --- Training Execution ---
+num_fitting_restarts: 1  # How many independent models to train
+save_every_n_iters: 25   # Checkpoint frequency
+
+# --- Analysis & Visualization ---
+analysis:
+  perform_analysis: true
+  merge_motifs: true      # Enable the Motif Merging strategy
+  merge_threshold: 12     # Minimum frames for a "Stable" motif
+  
+  plot_trajectories: true
+  plot_ethogram: true
+  plot_stats: true
+  plot_dendrogram: true
+  plot_transition_graph: true
+  generate_grid_movies: true
+  generate_3d_scatter: true
+  generate_labeled_videos: true
+
+  # Viz Details
+  trajectories:
+    save_gifs: true
+    save_mp4s: false
+    
+  grid_movies:
+    pre: 15   # Frames before
+    post: 15  # Frames after
+    rows: 3
+    cols: 3
+    plot_options:
+      keypoints_only: false
+
+  labeled_videos:
+    num_videos: 5
+    draw_skeleton: true
+
+  transition_graph:
+    layout: spring
+    node_size_scale: 100
+    edge_width_scale: 2
+    hide_self_transitions: true
+
+  stats:
+    min_frequency: 0.005
+    groupby: ["group"]
+    
+  ethogram:
+    cmap: Pastel
+  
+  scatter_3d:
+    palette: Pastel

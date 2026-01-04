@@ -1,0 +1,96 @@
+# KPMS Pipeline Configuration
+# Generated for User Request: 2026-01-04 Analysis
+
+# --- Project Paths ---
+# Use a timestamped directory as requested
+project_dir: /home/isonaei/ABVFM/KPMS/results/analysis_20260104_1603
+video_dir: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos
+data_dir: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos
+
+# --- Project Settings ---
+project_config:
+  video_extension: mp4
+  bodyparts: AUTO
+
+# --- Preprocessing ---
+preprocess:
+  fps: 30.0
+
+# --- Model Parameters ---
+model_params:
+  latent_dim: 0.9
+  num_iters: 400
+  ar_warmup_iters: 50
+  seed: 42
+  added_noise_level: 1.0
+  
+  error_estimator:
+    intercept: 1.0
+    slope: -0.5
+
+  kappa_scan:
+    num_steps: 10
+    min: 1000.0
+    max: 1.0e+12
+    ar_iters: 50
+    full_iters: 75
+
+# --- Tuning / Hyperparameters ---
+tuning:
+  target_motif_duration: 400
+  tolerance: 0.1
+  # Default values since scanning is skipped
+  ar_kappa: 1000000
+  full_kappa: 70000
+  full_kappa_ratio: none
+
+# --- Training Execution ---
+num_fitting_restarts: 1
+save_every_n_iters: 25
+
+# --- Analysis & Visualization ---
+analysis:
+  perform_analysis: true
+  merge_motifs: true
+  merge_threshold: 12
+  
+  plot_trajectories: true
+  plot_ethogram: true
+  plot_stats: true
+  plot_dendrogram: true
+  plot_transition_graph: true
+  generate_grid_movies: true
+  generate_3d_scatter: true
+  generate_labeled_videos: true
+
+  trajectories:
+    save_gifs: true
+    save_mp4s: false
+    
+  grid_movies:
+    pre: 15
+    post: 15
+    rows: 4
+    cols: 4
+    plot_options:
+      keypoints_only: false
+
+  labeled_videos:
+    num_videos: 5
+    draw_skeleton: true
+
+  transition_graph:
+    layout: spring
+    node_size_scale: 100
+    edge_width_scale: 2
+    hide_self_transitions: true
+
+  stats:
+    min_frequency: 0.005
+    groupby: ["group"]
+    
+  ethogram:
+    cmap: Pastel
+  
+  scatter_3d:
+    palette: Pastel

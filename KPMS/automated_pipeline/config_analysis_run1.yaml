@@ -1,0 +1,81 @@
+project_dir: "/home/isonaei/ABVFM/KPMS/results/010226_02_gemini_open_field"
+data_dir: "/home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos"
+video_dir: "/home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos" 
+
+project_config:
+  video_extension: "AUTO"
+  bodyparts: "AUTO"
+
+preprocess:
+  # fps: 30.0 
+
+model_params:
+  error_estimator:
+    slope: -0.5
+    intercept: 1.0
+  added_noise_level: 1.0
+  kappa_scan:
+    min: 1.0e+03
+    max: 1.0e+24
+    num_steps: 5
+    ar_iters: 20
+    full_iters: 50
+  
+  latent_dim: 0.9
+  num_iters: 300 
+
+num_fitting_restarts: 5 
+save_every_n_iters: 25
+ar_warmup_iters: 50
+  
+tuning:
+  target_motif_duration: 400
+  full_kappa_ratio: 0.01
+  full_kappa: 8660000
+  tolerance: 0.1
+
+analysis:
+  perform_analysis: true
+  plot_trajectories: false
+  plot_dendrogram: false
+  plot_stats: false
+  generate_grid_movies: false
+  generate_3d_scatter: false
+  
+  plot_transition_graph: false
+  plot_ethogram: true
+  generate_labeled_videos: false # Disabled for speed
+  
+  trajectories:
+    save_gifs: true
+    save_mp4s: false
+    
+  grid_movies:
+    pre: 15 
+    post: 15 
+    rows: 2 
+    cols: 2
+    plot_options:
+      keypoints_only: false
+      
+  stats:
+    min_frequency: 0.005
+    groupby: ["group"]
+    
+  transition_graph:
+    layout: 'spring'
+    node_size_scale: 100
+    edge_width_scale: 2
+    hide_self_transitions: true
+    
+  ethogram:
+    cmap: 'Pastel'
+    start_time: 5 # Start at 5 minutes
+    end_time: 7   # End at 7 minutes
+    
+  labeled_videos:
+    num_videos: 5
+    draw_skeleton: true
+    
+  scatter_3d:
+    palette: "Pastel"

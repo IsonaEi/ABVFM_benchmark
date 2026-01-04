@@ -1,0 +1,68 @@
+analysis:
+  ethogram:
+    cmap: Pastel
+  generate_3d_scatter: true
+  generate_grid_movies: true
+  generate_labeled_videos: true
+  grid_movies:
+    cols: 3
+    plot_options:
+      keypoints_only: false
+    post: 15
+    pre: 15
+    rows: 3
+  labeled_videos:
+    draw_skeleton: true
+    num_videos: 5
+  merge_motifs: true
+  merge_threshold: 11
+  perform_analysis: true
+  plot_dendrogram: true
+  plot_ethogram: true
+  plot_stats: true
+  plot_trajectories: true
+  plot_transition_graph: true
+  scatter_3d:
+    palette: Pastel
+  stats:
+    groupby:
+    - group
+    min_frequency: 0.005
+  trajectories:
+    save_gifs: true
+    save_mp4s: false
+  transition_graph:
+    edge_width_scale: 2
+    hide_self_transitions: true
+    layout: spring
+    node_size_scale: 100
+data_dir: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos
+model_params:
+  added_noise_level: 1.0
+  ar_warmup_iters: 50
+  error_estimator:
+    intercept: 1.0
+    slope: -0.5
+  kappa_scan:
+    ar_iters: 50
+    full_iters: 75
+    max: 1000000000000.0
+    min: 1000.0
+    num_steps: 10
+  latent_dim: 0.9
+  num_iters: 400
+num_fitting_restarts: 1
+preprocess:
+  fps: 30.0
+project_config:
+  bodyparts: AUTO
+  video_extension: mp4
+project_dir: /home/isonaei/ABVFM/KPMS/results/20260104-0810_ctrl_30fps
+save_every_n_iters: 25
+tuning:
+  ar_kappa: 1000000
+  full_kappa: 70000
+  full_kappa_ratio: none
+  target_motif_duration: 400
+  tolerance: 0.05
+video_dir: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos

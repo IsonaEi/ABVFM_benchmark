@@ -1,0 +1,11 @@
+keypoint-moseq
+jax
+jaxlib
+numpy
+pandas
+matplotlib
+seaborn
+plotly
+pyyaml
+opencv-python
+tqdm
