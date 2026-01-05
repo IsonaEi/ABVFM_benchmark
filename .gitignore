@@ -57,6 +57,21 @@ DLC/*/temp/
 
 # Generic CSVs (often data) - If you have config CSVs, we might need to exception them
 *.csv
+*.csv.tmp
 
-# Exceptions (if any specific config files are needed that match above)
-# !important_config.csv
+# Logs and Process Outputs
+logs/
+*.log
+**/logs/
+**/*.log
+
+# Source data folders (Videos/Raw data)
+sources/
+**/sources/
+
+# Catch-all for data directories
+**/data/
+**/Data/
+
+# Cloned dependencies (if strictly requested to only git own code)
+# DA3_Mouse_Height/Depth-Anything-3/

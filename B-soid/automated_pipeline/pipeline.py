@@ -1,4 +1,6 @@
+
 import os
+import datetime
 import sys
 import glob
 import yaml
@@ -11,6 +13,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 import re
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import StandardScaler
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
@@ -87,6 +93,8 @@ def convert_h5_to_csv(h5_files, output_dir):
             logging.error(f"Failed to convert {h5_file}: {e}")
             
     return csv_files
+
+
 
 def run_optimization(umap_embeddings, config):
     """
@@ -200,9 +208,6 @@ def plot_ethograms(results_dict, output_dir, filename_prefix, fps=30.0, cmap='ta
     max_label = np.max(unique_labels)
     palette = sns.color_palette(cmap, int(max_label) + 1)
     
-    # Map noise (-1) to different color (e.g. black or white)
-    # We will just mask it or start from 0 for the cmap
-    
     for i, key in enumerate(keys):
         labels = results_dict[key]
         
@@ -211,9 +216,6 @@ def plot_ethograms(results_dict, output_dir, filename_prefix, fps=30.0, cmap='ta
         duration = len(labels) / fps
         
         ax = axes[i]
-        # Mask noise for plotting
-        masked_data = np.ma.masked_where(im_data < 0, im_data)
-        
         ax.imshow(im_data, aspect='auto', cmap=cmap, vmin=0, vmax=max_label,
                   interpolation='nearest', extent=[0, duration, 0, 1])
         
@@ -228,11 +230,143 @@ def plot_ethograms(results_dict, output_dir, filename_prefix, fps=30.0, cmap='ta
     plt.close()
     logging.info(f"Saved ethogram to {out_path}")
 
+def plot_combined_ethograms(all_results_by_win, output_dir, filename_prefix, base_fps=30.0, cmap='tab20'):
+    """
+    Plots a consolidated ethogram showing multiple window sizes for the same session.
+    all_results_by_win: {win_ms: {filename: labels_array}}
+    """
+    if not all_results_by_win: return
+    
+    # We assume we want to plot for each file, but if data is limited, we might just have one.
+    # Let's find all unique filenames across all window sizes.
+    all_filenames = set()
+    for win_ms in all_results_by_win:
+        all_filenames.update(all_results_by_win[win_ms].keys())
+    
+    for filename in sorted(all_filenames):
+        win_sizes = sorted(all_results_by_win.keys())
+        n_rows = len(win_sizes)
+        
+        fig, axes = plt.subplots(n_rows, 1, figsize=(15, n_rows * 0.8 + 2), sharex=True)
+        if n_rows == 1: axes = [axes]
+        
+        # Find global max label for consistent colors if possible
+        global_max = 0
+        for win_ms in win_sizes:
+            if filename in all_results_by_win[win_ms]:
+                labels = all_results_by_win[win_ms][filename]
+                if len(labels) > 0:
+                    global_max = max(global_max, np.max(labels))
+        
+        for i, win_ms in enumerate(win_sizes):
+            ax = axes[i]
+            if filename in all_results_by_win[win_ms]:
+                labels = all_results_by_win[win_ms][filename]
+                im_data = labels.reshape(1, -1)
+                
+                # Use same extent for all to align them in time
+                # B-SOiD integrations cover roughly the same total time
+                total_duration = len(labels) * (win_ms / 1000.0) # Approx?
+                # Actually it's better to use the video duration if we had it, 
+                # but since we are comparing integration bins, let's just stretch them to [0, 1] or a fixed time.
+                # Let's assume the first window size sets the reference duration if they differ slightly.
+                
+                ax.imshow(im_data, aspect='auto', cmap=cmap, vmin=0, vmax=global_max,
+                          interpolation='nearest', extent=[0, 100, 0, 1]) # Percent scale
+                
+            ax.set_yticks([])
+            ax.set_ylabel(f"{win_ms}ms", rotation=0, ha='right', fontsize=10)
+            
+        axes[0].set_title(f"Window Size Comparison - {os.path.basename(filename)}", fontsize=14)
+        axes[-1].set_xlabel("Session Progress (%)", fontsize=12)
+        
+        clean_name = os.path.basename(filename).replace('.csv', '')
+        out_path = os.path.join(output_dir, f"combined_ethogram_{clean_name}_{filename_prefix}.png")
+        plt.tight_layout()
+        plt.savefig(out_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        logging.info(f"Saved combined ethogram to {out_path}")
+
+def plot_parameter_summary(summary_df, output_dir, ts):
+    """
+    Plots the summary of parameter search: Duration vs Window Size.
+    """
+    if summary_df.empty:
+        logging.warning("No summary data to plot.")
+        return
+
+    plt.figure(figsize=(10, 6))
+    
+    # Scatter plot: Window Size vs Mean Duration
+    # Color by Number of Clusters?
+    sns.scatterplot(data=summary_df, x='Window_Size_ms', y='Mean_Duration_ms', 
+                    hue='Num_Clusters', palette='viridis', s=100)
+    
+    # Add line to show trend
+    sns.lineplot(data=summary_df, x='Window_Size_ms', y='Mean_Duration_ms', 
+                 color='gray', alpha=0.5, sort=True)
+    
+    plt.title("B-SOiD Parameter Search: Duration vs Window Size")
+    plt.xlabel("Window Size (ms)")
+    plt.ylabel("Mean Duration (ms)")
+    plt.grid(True, alpha=0.3)
+    
+    out_path = os.path.join(output_dir, f"parameter_summary_{ts}.png")
+    plt.savefig(out_path, dpi=300)
+    plt.close()
+    logging.info(f"Saved parameter summary plot to {out_path}")
+
+def train_classifier(feats, labels, config):
+    """
+    Trains MLP classifier on stable clusters to predict all points.
+    Fills in noise (-1) and smooths assignments.
+    """
+    mlp_params = config.get('mlp_params', {})
+    
+    # Transpose feats to (n_samples, n_features) for sklearn
+    feats = feats.T
+    
+    # Filter out noise for training
+    valid_mask = labels >= 0
+    feats_train_subset = feats[valid_mask]
+    labels_train_subset = labels[valid_mask]
+    
+    unique_labels = np.unique(labels_train_subset)
+    if len(unique_labels) < 2:
+        logging.warning("Not enough classes for MLP training.")
+        return labels, None
+        
+    logging.info(f"Training MLP on {len(feats_train_subset)} instances (excluding {np.sum(~valid_mask)} noise points)...")
+    
+    # Initialize Classifier
+    # Default B-SOiD params if not in config
+    clf = MLPClassifier(
+        hidden_layer_sizes=tuple(mlp_params.get('hidden_layer_sizes', (100, 10))),
+        activation=mlp_params.get('activation', 'logistic'),
+        solver=mlp_params.get('solver', 'adam'),
+        alpha=mlp_params.get('alpha', 0.0001),
+        learning_rate_init=mlp_params.get('learning_rate_init', 0.001),
+        max_iter=mlp_params.get('max_iter', 1000),
+        random_state=42 # Fixed seed for reproducibility of classifier
+    )
+    
+    # Fit
+    clf.fit(feats_train_subset, labels_train_subset)
+    
+    # Validate (internal 5-fold CV score for logging)
+    scores = cross_val_score(clf, feats_train_subset, labels_train_subset, cv=5, n_jobs=1)
+    logging.info(f"MLP Cross-Validation Accuracy: {scores.mean():.4f} (+/- {scores.std() * 2:.4f})")
+    
+    # Predict ALL data (including previously noisy points)
+    final_labels = clf.predict(feats)
+    
+    return final_labels, clf
+
 def main():
     config = load_config()
     setup_environment(config)
     
-    # Import B-SOID modules now
+    # Import B-SOiD modules now
     try:
         # Patch BASE_PATH before importing other modules that depend on it
         import bsoid_umap.config.LOCAL_CONFIG
@@ -241,7 +375,7 @@ def main():
         from bsoid_umap.utils.likelihoodprocessing import main as lk_main
         from bsoid_umap.train import bsoid_feats, bsoid_umap_embed
     except ImportError as e:
-        logging.error(f"Could not import B-SOID modules: {e}")
+        logging.error(f"Could not import B-SOiD modules: {e}")
         return
 
     # Process Input
@@ -254,181 +388,283 @@ def main():
         return
 
     # Determine FPS
-    fps = config.get('fps')
-    if not fps and video_files:
-        fps = get_video_fps(video_files[0])
-        logging.info(f"Detected FPS from video: {fps}")
-    elif not fps:
-        fps = 30.0
+    base_fps = config.get('fps')
+    if not base_fps and video_files:
+        base_fps = get_video_fps(video_files[0])
+        logging.info(f"Detected FPS from video: {base_fps}")
+    elif not base_fps:
+        base_fps = 30.0
         logging.warning("No FPS specified and no video found. Defaulting to 30.0.")
     
-    config['fps'] = fps # Update config so run_optimization uses the detected FPS
+    config['fps'] = base_fps 
     
     # Convert H5 to CSV
     temp_csv_dir = os.path.join(input_dir, "bsoid_csv_temp")
     csv_files = convert_h5_to_csv(h5_files, temp_csv_dir)
     
-    # B-SOID Processing
-    # 1. Likelihood Processing
-    # Need to pass folder containing CSVs? Or list of files?
-    # lk_main takes a LIST of folders.
-    # So we pass [temp_csv_dir]
+    # B-SOiD Processing - Likelihood (Common for all runs? No, maybe not)
+    # Actually Likelihood processing is independent of window size. It just reads CSV.
+    # But bsoid_feats depends on window size.
     
     logging.info("Processing likelihood and extracting features...")
     filenames, training_data, perc_rect = lk_main([temp_csv_dir])
     
-    # 2. Extract Features
-    f_10fps, f_10fps_sc = bsoid_feats(training_data, fps=fps)
-    
-    # 3. UMAP
-    logging.info("Running UMAP...")
-    umap_params = config['umap_params']
-    trained_umap, umap_embeddings = bsoid_umap_embed(f_10fps_sc, umap_params)
-    
-    # 4. Optimization & Clustering (HDBSCAN)
-    logging.info("Running HDBSCAN Optimization...")
-    best_assignments, best_min_size = run_optimization(umap_embeddings, config)
-    
-    # 5. Save Results
-    output_dir = config['output_dir']
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    
-    # Save combined output
-    # assignments are for the CONCATENATED features.
-    # We need to split them back to sessions to generate separate CSVs and Plots
-    
-    # Calculate indices
-    # sizes are in training_data (list of arrays)
-    # BUT f_10fps is downsampled/integrated!
-    # f_10fps shape corresponds to concatenated data.
-    # We need to reconstruction session split.
-    
-    # B-SOID `bsoid_feats` implementation:
-    # Concatenates feats1 into f_10fps.
-    # We need to track the length of each session's contribution to f_10fps.
-    
-    # Hack: Rerun feature extraction per file? No, expensive.
-    # B-SOID `bsoid_feats` unfortunately returns concatenated result and doesn't return indices.
-    # But we can recalculate the expected length logic:
-    # "for k in range(round(fps / 10), len(feats[n][0]), round(fps / 10))"
-    
-    session_lengths = []
-    # Re-simulating the loop logic to get lengths
-    # Features extraction first loop creates 'feats' list.
-    # Second loop creates 'feats1' and concatenates.
-    
-    # Actually, we can just look at `filenames` returned by `lk_main`.
-    # And we need to know the raw data length to calculate expected features.
-    
-    # Let's rely on the fact that we can't easily modify `bsoid_feats` without forking.
-    # BUT `bsoid_feats` iterates over `data`.
-    # `data` is a list of arrays.
-    # We can perform a dummy calculation to know the size.
-    
-    start_idx = 0
-    results_dict = {}
-    
-    header_info = [filename[0] for filename in filenames] # filenames is usually a list of lists (folders -> files)
-    # Actually lk_main return `filenames` as list of lists if multiple folders.
-    # Since we passed one folder, it is filenames[0] which is the list of files.
-    flat_filenames = filenames[0]
-    
-    for i, data_arr in enumerate(training_data):
-        # Logic from bsoid_feats
-        # dataRange = len(data[m]) ...
-        # feats1 loop...
-        # The number of bins is roughly data_len // (fps/10).
-        
-        # Let's use the exact logic to be safe
-        n_bins = 0
-        bin_len = int(round(fps/10))
-        # feats length is data_arr.shape[0] usually (minus window?)
-        # window is small (win_len).
-        # feats construction creates array of size dataRange-1 or similar.
-        # Let's assume proportional length.
-        
-        # Alternative: We can modify bsoid_feats or copy it.
-        # It's safer to just assume we simply assign the labels sequentially to the files in order.
-        # But we don't know the exact length of each file's contribution.
-        
-        # Better approach: We have `f_10fps` (concatenated). 
-        # We assume `training_data` order matches.
-        # We can implement a quick helper to get exact feature count per session.
-        # bsoid_feats -> feats -> feats1
-        # The downsampling is predictable.
-        
-        # Simplified:
-        raw_len = data_arr.shape[0]
-        # features are calculated with window, so usually len-1
-        # Then integrated.
-        feat_len = raw_len # Simplified
-        
-        # Integration step:
-        # range(bin_len, feat_len, bin_len)
-        # count = len(range(...))
-        n_output = len(range(bin_len, feat_len, bin_len))  # Approx
-        # Wait, bsoid uses `feats[n][0]` length in the range. 
-        # `feats` generation: 
-        # feats.append(np.vstack(...))
-        # shape is roughly input length.
-        
-        pass
-
-    # Since splitting is tricky without modifying B-SOID, 
-    # and we need accurate splitting for the Ethogram, 
-    # I will create a monkey-patched version of bsoid_feats inside this script 
-    # or just copy the logic to calculate lengths.
-    
-    current_idx = 0
-    
     # Helper to calculate expected length
-    def calc_feat_length(raw_data_shape, fps):
+    def calc_feat_length(raw_data_shape, current_fps):
         # Logic from bsoid_feats
         # feats shape is determined by raw data.
         # dxy_r loop runs dataRange times.
         # feats is same length as raw (roughly)
         # integration loop:
-        bin_size = int(round(fps/10))
+        bin_size = int(round(current_fps/10))
         # range(bin_size, data_range, bin_size)
         return len(range(bin_size, raw_data_shape[0], bin_size))
 
-    logging.info("Splitting results back to sessions...")
+    # Parameter Search Logic
+    param_search = config.get('param_search', {})
+    if param_search.get('enabled', False):
+        window_sizes = param_search.get('window_sizes_ms', [100])
+        logging.info(f"Starting Parameter Search. Window Sizes: {window_sizes}")
+    else:
+        window_sizes = [100] # Default 100ms if search disabled
+        logging.info("Parameter Search Disabled. Running single pass with 100ms window.")
+
+    # Prepare main output directory
+    # Create a unique run folder with timestamp (to Minute)
+    run_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+    main_output_dir = os.path.join(config['output_dir'], f"run_{run_timestamp}")
+    if not os.path.exists(main_output_dir):
+        os.makedirs(main_output_dir)
     
-    for i, filename in enumerate(flat_filenames):
-        n_predictions = calc_feat_length(training_data[i].shape, fps)
+    logging.info(f"Summary results will be saved in: {main_output_dir}")
         
-        end_idx = current_idx + n_predictions
+    ts_run = time.strftime("%Y%m%d_%H%M%S")
+    summary_results = []
+    all_win_results = {} # {win_ms: {filename: labels}}
+    
+    for win_ms in window_sizes:
+        logging.info(f"--- Running for Window Size: {win_ms}ms ---")
         
-        # Safety check
-        if end_idx > len(best_assignments):
-            end_idx = len(best_assignments)
+        # Calculate Fake FPS
+        # B-SOID window = int(fps * 0.1) = 1/10th of a second = 100ms default.
+        # If we want Win_ms, we need: Win_ms = (1/10 second) ... wait.
+        # B-SOiD hardcodes window = round(fps/10).
+        # Window Duration (s) = Window_Frames / FPS
+        # Window_Frames = FPS / 10
+        # Window Duration = (FPS/10) / FPS = 0.1 sec = 100 ms.
+        # Wait, if `window` is frame count, it is always 100ms if it's FPS/10.
+        # So B-SOiD ALWAYS uses a 100ms window regardless of FPS?
+        # NO. Let's check `bsoid_feats` source code logic again (mental check).
+        # `window = int(round(fps/10))`
+        # If FPS=30, window=3 frames. 3 frames @ 30fps = 0.1s.
+        # If FPS=60, window=6 frames. 6 frames @ 60fps = 0.1s.
+        # So B-SOiD is DESIGNED to validly lock to 100ms.
+        
+        # KEY INSIGHT from Paper: "we reran the pipeline with falsely inflated frame rates"
+        # If we tell B-SOiD the video is 300 FPS (but it's actually 30 FPS).
+        # Then B-SOiD sets window = 300/10 = 30 frames.
+        # But since the REAL data is 30 FPS.
+        # 30 frames covers 1.0 second!!
+        # So "Inflating FPS" -> "Larger Window".
+        
+        # Relation:
+        # B-SOiD calculates `win_len = fps_param / 10`.
+        # Real Duration (s) = win_len / REAL_FPS.
+        # Real Duration = (fps_param / 10) / REAL_FPS.
+        
+        # We want Target Duration (T_target).
+        # T_target = (fps_param / 10) / REAL_FPS
+        # => fps_param = T_target * REAL_FPS * 10
+        
+        # Example: Target 200ms = 0.2s. Real FPS = 30.
+        # fps_param = 0.2 * 30 * 10 = 60.
+        # Check: fps_param=60 -> win_len = 6. 
+        # Real duration of 6 frames @ 30fps = 6/30 = 0.2s. Correct.
+        
+        target_s = win_ms / 1000.0
+        fake_fps = target_s * base_fps * 10.0
+        
+        logging.info(f"Target: {win_ms}ms. Real FPS: {base_fps}. Fake FPS param: {fake_fps}")
+        
+        # 2. Extract Features (with fake_fps)
+        f_10fps, f_10fps_sc = bsoid_feats(training_data, fps=fake_fps)
+        
+        # 3. UMAP
+        logging.info("Running UMAP...")
+        umap_params = config['umap_params']
+        trained_umap, umap_embeddings = bsoid_umap_embed(f_10fps_sc, umap_params)
+        
+        # 4. Optimization & Clustering (HDBSCAN)
+        logging.info("Running HDBSCAN Optimization...")
+        # Note: Optimization also uses FPS to calculate duration. 
+        # Should we use Real FPS or Fake FPS for duration calc?
+        # `run_optimization` calculates `bout_times`.
+        # `bout_times` are in indices. 
+        # The indices step is dependent on the `bsoid_feats` integration step.
+        # `bsoid_feats` integration step: `range(0, len, round(fps/10))` or similar?
+        # Actually `bsoid_feats` outputs features at what rate?
+        # It's called "10fps" usually?
+        # B-SOiD paper says it extracts features then integrates/bins them.
+        # Usually it tries to output features at a standardized rate?
+        # Let's assume standard B-SOiD workflow outputs features that represent *epochs*.
+        # The epoch length is `round(fps/10)` frames.
+        # So each data point in `f_10fps` represents `round(fake_fps/10)` frames of the INPUT data?
+        # Wait.
+        # If `fake_fps` causes `win_len` to change.
+        # And the "integration" step likely uses `win_len` as the step size (stride).
+        # `range(0, N, win_len)`
+        # If win_len is larger (30 frames instead of 3), we have FEWER feature points.
+        # But each point covers more time (1.0s instead of 0.1s).
+        
+        # So when calculating duration in `run_optimization`:
+        # We have N bouts. Each bout is X points.
+        # Duration = X * (Time per point).
+        # What is Time Per Point?
+        # Time Per Point = win_len / REAL_FPS.
+        # Time Per Point = (fake_fps/10) / base_fps.
+        
+        # So we must pass the CORRECT time-per-point info to `run_optimization`.
+        # `run_optimization` currently uses `config['fps']`.
+        # If it does `frames / fps`, that assumes 1 point = 1 frame? 
+        # NO. `run_optimization` logic:
+        # `bout_times = np.array(valid_bout_lens) / fps * 1000`
+        # This assumes `valid_bout_lens` is in FRAMES?
+        # NO, `valid_bout_lens` is in count of LABELS.
+        # B-SOiD output labels are at 10Hz typically (if native).
+        # If we mess with it, the output rate changes.
+        
+        # Let's adjust `run_optimization` or pass the effective FPS for duration calc.
+        # Effective FPS of the OUTPUT (labels) = 1 / (Time per point).
+        # Time per point = (fake_fps/10) / base_fps.
+        # Effective FPS = base_fps / (fake_fps/10) = 10 * base_fps / fake_fps.
+        
+        # Let's calculate effective_output_fps.
+        effective_output_fps = (10.0 * base_fps) / fake_fps
+        
+        # We need to temporarily update config['fps'] just for `run_optimization` 
+        # so it calculates duration ms correctly.
+        config_copy = config.copy()
+        config_copy['fps'] = effective_output_fps 
+        
+        best_assignments, best_min_size = run_optimization(umap_embeddings, config_copy)
+        
+        # --- MLP CLASSIFIER STEP ---
+        # Post-process with Neural Network if clusters exist
+        num_clusters_hdb = len(np.unique(best_assignments[best_assignments >= 0]))
+        
+        if num_clusters_hdb >= 2:
+            logging.info("Training MLP Classifier to refine clusters...")
+            final_labels, clf = train_classifier(f_10fps_sc, best_assignments, config)
+            # Use final_labels for output
+            session_labels_source = final_labels
+        else:
+            logging.info("Skipping MLP training (not enough clusters). Using HDBSCAN labels.")
+            session_labels_source = best_assignments
             
-        session_labels = best_assignments[current_idx:end_idx]
-        results_dict[filename] = session_labels
+        # 5. Save Results for this run
+        run_output_dir = os.path.join(main_output_dir, f"win_{win_ms}ms")
+        if not os.path.exists(run_output_dir):
+            os.makedirs(run_output_dir)
+            
+        current_idx = 0
+        results_dict = {}
+        flat_filenames = filenames[0]
         
-        # Save CSV
-        basename = os.path.basename(filename).replace('.csv', '')
-        out_csv = os.path.join(output_dir, f"{basename}_labels.csv")
+        logging.info(f"Splitting results back to sessions (Effective Output FPS: {effective_output_fps:.2f})...")
         
-        # Create DataFrame
-        # Time axis?
-        # 10Hz = 0.1s per bin
-        time_axis = np.arange(len(session_labels)) * 0.1
-        df_out = pd.DataFrame({
-            "Time": time_axis,
-            "B-SOiD_Label": session_labels
+        for i, filename in enumerate(flat_filenames):
+            # Recalculate feature length using FAKE FPS (since that determined the stride)
+            n_predictions = calc_feat_length(training_data[i].shape, fake_fps)
+            
+            end_idx = current_idx + n_predictions
+            if end_idx > len(session_labels_source): end_idx = len(session_labels_source)
+                
+            session_labels = session_labels_source[current_idx:end_idx]
+            results_dict[filename] = session_labels
+            
+            # Save CSV
+            basename = os.path.basename(filename).replace('.csv', '')
+            out_csv = os.path.join(run_output_dir, f"{basename}_labels.csv")
+            
+            # Time axis based on EFFECTIVE output FPS
+            # dt = 1 / effective_output_fps
+            time_axis = np.arange(len(session_labels)) * (1.0 / effective_output_fps)
+            
+            pd.DataFrame({
+                "Time": time_axis,
+                "B-SOiD_Label": session_labels
+            }).to_csv(out_csv, index=False)
+            
+            current_idx = end_idx
+            
+        # Plot Ethogram
+        plot_ethograms(results_dict, run_output_dir, f"ethogram_win{win_ms}", fps=effective_output_fps)
+        all_win_results[win_ms] = results_dict
+        
+        # Collect Summary Stats
+        # Recalculate mean duration from optimization result?
+        # Or just re-calc here to comprise all files?
+        # Let's iterate assignments again.
+        
+        # Collect Summary Stats
+        labels = session_labels_source # Use the refined labels
+        valid_labels = labels[labels >= 0]
+        if len(valid_labels) > 0:
+            # We can re-use the logic or just trust the optimization log?
+            # Better to calc from final assignment to be sure.
+            
+            # Simple bout duration logic
+            # This logic is repeating `run_optimization` part, could be refactored, but fine inline.
+            bouts = []
+            curr = labels[0]
+            count = 0
+            bout_lens = []
+            
+            for l in labels:
+                if l == curr:
+                    count += 1
+                else:
+                    if curr != -1:
+                        bout_lens.append(count)
+                    curr = l
+                    count = 1
+            if curr != -1:
+                bout_lens.append(count)
+            
+            if bout_lens:
+                bout_times_ms = (np.array(bout_lens) / effective_output_fps) * 1000
+                mean_dur = np.mean(bout_times_ms)
+                num_clusters = len(np.unique(valid_labels))
+            else:
+                mean_dur = 0
+                num_clusters = 0
+        else:
+            mean_dur = 0
+            num_clusters = 0
+            
+        summary_results.append({
+            "Window_Size_ms": win_ms,
+            "Fake_FPS": fake_fps,
+            "Num_Clusters": num_clusters,
+            "Mean_Duration_ms": mean_dur
         })
-        df_out.to_csv(out_csv, index=False)
         
-        current_idx = end_idx
+        logging.info(f"Run {win_ms}ms complete. Clusters: {num_clusters}, Mean Duration: {mean_dur:.2f}ms")
         
-    # Plot Ethogram
-    plot_ethograms(results_dict, output_dir, f"combined_{ts}", fps=10.0) # B-SOID output is 10Hz
-    
-    logging.info(f"Pipeline completed. Results saved to {output_dir}")
+    # Generate Summary CSV and Plot
+    if summary_results:
+        summary_df = pd.DataFrame(summary_results)
+        summary_csv = os.path.join(main_output_dir, f"parameter_summary_{ts_run}.csv")
+        summary_df.to_csv(summary_csv, index=False)
+        logging.info(f"Saved parameter summary CSV to {summary_csv}")
+        
+        try:
+            plot_parameter_summary(summary_df, main_output_dir, ts_run)
+            plot_combined_ethograms(all_win_results, main_output_dir, f"all_windows_{run_timestamp}", base_fps=base_fps)
+        except Exception as e:
+            logging.error(f"Failed to plot summaries: {e}")
+            
+    logging.info(f"Pipeline completed. All results saved to {main_output_dir}")
 
 if __name__ == "__main__":
     main()

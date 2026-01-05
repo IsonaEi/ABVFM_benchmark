@@ -102,6 +102,36 @@ def load_castle_labels(path):
     
     return labels
 
+def load_bsoid_labels(path):
+    """
+    Loads B-SOiD labels from CSV.
+    Expected columns: 'Time', 'B-SOiD_Label'
+    Returns:
+        labels: numpy array of labels
+        fps: float, calculated from Time column
+    """
+    print(f"Loading B-SOiD labels from {path}...")
+    df = pd.read_csv(path)
+    
+    if 'Time' not in df.columns or 'B-SOiD_Label' not in df.columns:
+        raise ValueError("B-SOiD CSV must have 'Time' and 'B-SOiD_Label' columns.")
+        
+    labels = df['B-SOiD_Label'].values
+    times = df['Time'].values
+    
+    # Calculate FPS from time diffs
+    # Taking median diff to be robust against small jitters
+    dt = np.median(np.diff(times))
+    if dt <= 0:
+        print("Warning: B-SOiD time diff <= 0, defaulting to 10 FPS.")
+        fps = 10.0
+    else:
+        fps = 1.0 / dt
+        
+    print(f"B-SOiD FPS estimated as: {fps:.2f} Hz")
+    
+    return labels, fps
+
 def egocentric_alignment(kps, bodyparts):
     """
     Aligns keypoints to egocentric frame (Heading: Tail -> Snout).
@@ -290,8 +320,23 @@ def main():
         kps_path = os.path.join(KEYPOINT_DIR, kps_file)
         
         kpms_path = os.path.join(LABEL_DIR, "KPMS_results.h5")
-        castle_path = [f for f in os.listdir(LABEL_DIR) if 'CASTLE' in f and f.endswith('.npy')][0]
-        castle_path = os.path.join(LABEL_DIR, castle_path)
+        
+        # Robustly find CASTLE file
+        castle_files = [f for f in os.listdir(LABEL_DIR) if 'CASTLE' in f and (f.endswith('.npy') or f.endswith('.csv'))]
+        if not castle_files:
+             print("Warning: No CASTLE file found.")
+             castle_path = None
+        else:
+             castle_path = os.path.join(LABEL_DIR, castle_files[0])
+             
+        # Robustly find B-SOiD file
+        bsoid_files = [f for f in os.listdir(LABEL_DIR) if 'B-soid' in f and f.endswith('.csv')]
+        if not bsoid_files:
+             print("Warning: No B-SOiD file found.")
+             bsoid_path = None
+        else:
+             bsoid_path = os.path.join(LABEL_DIR, bsoid_files[0])
+             
     except IndexError as e:
         print(f"Error finding files: {e}")
         return
@@ -299,11 +344,20 @@ def main():
     # 1. Load Data
     kps, bodyparts = load_dlc_keypoints(kps_path)
     kpms_labels = load_kpms_labels(kpms_path)
-    castle_labels = load_castle_labels(castle_path)
+    
+    castle_labels = None
+    if castle_path:
+        castle_labels = load_castle_labels(castle_path)
+        print(f"CASTLE Labels: {castle_labels.shape}")
+        
+    bsoid_labels = None
+    bsoid_fps = None
+    if bsoid_path:
+        bsoid_labels, bsoid_fps = load_bsoid_labels(bsoid_path)
+        print(f"B-SOiD Labels: {bsoid_labels.shape}")
     
     print(f"Keypoints: {kps.shape}")
     print(f"KPMS Labels: {kpms_labels.shape}")
-    print(f"CASTLE Labels: {castle_labels.shape}")
     
     # 2. Compute Change Score on FULL data
     aligned_kps = egocentric_alignment(kps, bodyparts)
@@ -321,9 +375,15 @@ def main():
         
     # CASTLE
     factor_castle = 1
-    if len(castle_labels) != len(change_score):
+    if castle_labels is not None and len(castle_labels) != len(change_score):
         factor_castle = len(change_score) / len(castle_labels)
         print(f"Detected CASTLE downsampling factor: {factor_castle}")
+        
+    # B-SOiD
+    factor_bsoid = 1
+    if bsoid_labels is not None and len(bsoid_labels) != len(change_score):
+         factor_bsoid = len(change_score) / len(bsoid_labels)
+         print(f"Detected B-SOiD downsampling factor: {factor_bsoid}")
         
     WINDOW = 45 # 1.5s @ 30Hz
     
@@ -337,8 +397,17 @@ def main():
     kpms_down_m, kpms_down_s, kpms_down_stack = get_event_triggered_traces(change_score, kpms_labels_down, WINDOW, factor_kpms_down)
     # ------------------------------------
     
-    print("Extracting CASTLE traces...")
-    castle_m, castle_s, castle_stack = get_event_triggered_traces(change_score, castle_labels, WINDOW, factor_castle)
+    if castle_labels is not None:
+        print("Extracting CASTLE traces...")
+        castle_m, castle_s, castle_stack = get_event_triggered_traces(change_score, castle_labels, WINDOW, factor_castle)
+    else:
+        castle_stack = []
+        
+    if bsoid_labels is not None:
+        print("Extracting B-SOiD traces...")
+        bsoid_m, bsoid_s, bsoid_stack = get_event_triggered_traces(change_score, bsoid_labels, WINDOW, factor_bsoid)
+    else:
+        bsoid_stack = []
     
     # 4. Plot (2 Subplots)
     print("Generating plot...")
@@ -362,6 +431,13 @@ def main():
     if len(castle_stack) > 0:
         ax1.plot(x_sec, castle_m, label=f'CASTLE (6Hz)', color='#4A90E2', linewidth=2, zorder=2)
         ax1.fill_between(x_sec, castle_m-castle_s, castle_m+castle_s, color='#4A90E2', alpha=0.3, zorder=2)
+        
+    # B-SOiD (Green)
+    if len(bsoid_stack) > 0:
+        # Round label for legend
+        fps_lbl = f"{int(round(bsoid_fps))}Hz" if bsoid_fps else "N/A"
+        ax1.plot(x_sec, bsoid_m, label=f'B-SOiD ({fps_lbl})', color='#50C878', linewidth=2, zorder=2)
+        ax1.fill_between(x_sec, bsoid_m-bsoid_s, bsoid_m+bsoid_s, color='#50C878', alpha=0.3, zorder=2)
         
     ax1.axvline(0, color='gray', linestyle='--', alpha=0.5)
     ax1.set_xlabel('Time from transition (s)')
@@ -396,6 +472,11 @@ def main():
         violin_data.append(castle_stack[:, center_idx])
         violin_labels.append('CASTLE')
         violin_colors.append('#4A90E2')
+        
+    if len(bsoid_stack) > 0:
+        violin_data.append(bsoid_stack[:, center_idx])
+        violin_labels.append('B-SOiD')
+        violin_colors.append('#50C878')
 
     if violin_data:
         parts = ax2.violinplot(violin_data, showmeans=True, showextrema=False)
@@ -431,9 +512,22 @@ def main():
     
     # 5. Combined Ethogram & Duration Plot (Fig 3a/b style)
     print("Generating Ethogram & Duration plot...")
+    
+    # Pack data
+    labels_dict = {'KPMS': kpms_labels}
+    fps_dict = {'KPMS': 30.0}
+    
+    if castle_labels is not None:
+        labels_dict['CASTLE'] = castle_labels
+        fps_dict['CASTLE'] = 6.0 # Hardcoded usually, or infer? let's stick to 6.0 as known
+        
+    if bsoid_labels is not None:
+        labels_dict['B-SOiD'] = bsoid_labels
+        fps_dict['B-SOiD'] = bsoid_fps if bsoid_fps else 30.0
+
     plot_ethogram_and_durations(
-        {'KPMS': kpms_labels, 'CASTLE': castle_labels},
-        {'KPMS': 30.0, 'CASTLE': 6.0}, # FPS
+        labels_dict,
+        fps_dict,
         window_min=(5, 7) # 5th to 7th minute
     )
 
@@ -461,6 +555,8 @@ def plot_ethogram_and_durations(labels_dict, fps_dict, window_min=(5, 7)):
         # Let's use a sequential map but sample it to get discrete colors
         if 'E0C068' in base_color_hex: # Gold -> Oranges/YlOrBr
              base_cmap = cm.get_cmap('YlOrBr', n_states) # Discrete sampling
+        elif '50C878' in base_color_hex: # Green -> Greens
+             base_cmap = cm.get_cmap('Greens', n_states)
         else: # Blue -> Blues/PuBu
              base_cmap = cm.get_cmap('Blues', n_states)
              
@@ -481,7 +577,12 @@ def plot_ethogram_and_durations(labels_dict, fps_dict, window_min=(5, 7)):
         fps = fps_dict[method]
         
         # Base color
-        base_color = '#E0C068' if 'KPMS' in method else '#4A90E2'
+        if 'KPMS' in method:
+            base_color = '#E0C068'
+        elif 'B-SOiD' in method:
+            base_color = '#50C878'
+        else:
+            base_color = '#4A90E2'
         
         # --- Left: Ethogram (Barcode) ---
         ax_eth = fig.add_subplot(gs[i, 0])

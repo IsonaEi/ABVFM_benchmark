@@ -1,9 +1,9 @@
 # B-SOID Automated Pipeline Configuration
 
 # Input/Output
-input_dir: "/home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos"  # Will generally be overridden or used as default
-output_dir: "/home/isonaei/ABVFM/B-soid/results"
-bsoid_source_dir: "/home/isonaei/ABVFM/B-soid/source_code"
+input_dir: "/home/isonaei/ABVFM_benchmark/B-soid/input_data_full"  # Specific folder for this run
+output_dir: "/home/isonaei/ABVFM_benchmark/B-soid/results"
+bsoid_source_dir: "/home/isonaei/ABVFM_benchmark/venvs/b-soid-official/B-SOID_source"
 
 # Video Processing
 fps: null  # If null, extract from video file
@@ -13,15 +13,34 @@ umap_params:
   n_neighbors: 60
   min_dist: 0.0
   n_components: 3
-  random_state: 42
+  random_state: 43
 
 # HDBSCAN Parameters
 hdbscan_params:
   prediction_data: True
   min_samples: 1  # Will often be set same as min_cluster_size
 
+# MLP Parameters
+mlp_params:
+  hidden_layer_sizes: [100, 10]
+  activation: 'logistic'
+  solver: 'adam'
+  learning_rate: 'constant'
+  learning_rate_init: 0.001
+  alpha: 0.0001
+  max_iter: 1000
+  early_stopping: false
+  verbose: false
+
 # Optimization Parameters
 optimization:
   min_cluster_size_range: [0.001, 0.01]  # 0.1% to 1.0%
-  min_duration_ms: 400
+  min_duration_ms: 100
   steps: 10  # Number of steps in the range to test
+
+# Parameter Search Configuration
+param_search:
+  enabled: true
+  window_sizes_ms: [60, 100, 200, 300, 500, 700, 900] # Full clean re-run
+  # Random seed is fixed to 42 in standard config, so we don't list it here for search unless needed
+
