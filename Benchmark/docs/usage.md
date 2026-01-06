@@ -15,6 +15,12 @@ Benchmark/
 │   ├── KPMS_results.h5         # Keypoint-MoSeq output
 │   ├── CASTLE_*.npy            # CASTLE output (numpy array)
 │   └── B-soid_*.csv            # B-SOiD output (Time, Label CSV)
+├── results/                    # Output: Timestamped result folders
+│   └── run_YYYYMMDD_HHMM/      # Each run creates a new folder
+│       ├── benchmark_change_score_combined.png
+│       ├── benchmark_fig3_AB_style.png
+│       ├── statistics.csv
+│       └── summary.md
 └── docs/
     └── usage.md                # This file
 ```
@@ -34,13 +40,14 @@ All label files should be placed in `lable_data/`.
   - **Structure**: H5 file containing a `syllable` or `latent_state` dataset.
 
 - **CASTLE**
-  - **File**: `*.npy` (e.g., `CASTLE_ctrl_syll_align.npy`)
-  - **Structure**: Numpy array of integer labels matching the total number of frames (or a consistent fraction).
+  - **File**: `*.npy` or `*.csv`
+  - **Structure**: Numpy array or CSV with `behavior_label` or `behavior` column.
+  - **Note**: Versioning info in parentheses `(MX)` or `(Raiso)` will be used as labels.
 
 - **B-SOiD**
-  - **File**: `*.csv` (e.g., `B-soid_300ms.csv`)
+  - **File**: `*.csv` (e.g., `B-soid_run_..._200ms.csv`)
   - **Structure**: CSV file with at least two columns: `Time` and `B-SOiD_Label`.
-  - **Note**: The script automatically calculates the FPS from the `Time` column.
+  - **Note**: Windows size or version in parentheses will be used as labels.
 
 ## Running the Benchmark
 
@@ -48,8 +55,8 @@ All label files should be placed in `lable_data/`.
    Ensure you have the necessary dependencies installed (pandas, numpy, matplotlib, h5py, scipy).
 
    ```bash
-   # Example (adjust to your specific venv)
-   source ../venvs/b-soid-official/bin/activate 
+   # From ABVFM_benchmark directory
+   /home/isonaei/ABVFM_benchmark/venvs/keypoint-moseq/bin/python Benchmark/benchmark_change_score.py
    ```
 
 2. **Execute the Script**
@@ -61,15 +68,21 @@ All label files should be placed in `lable_data/`.
 
 ## Output
 
-The script generates the following visualizations in the `Benchmark` directory:
+Each run creates a new directory in `Benchmark/results/run_YYYYMMDD_HHMM/` containing:
 
 1.  **`benchmark_change_score_combined.png`**
-    -   **Left**: Event-Triggered Average of Change Scores. Shows how the velocity (change score) behaves around the transition point of behavioral syllables for each method.
-    -   **Right**: Violin plots showing the distribution of change scores at the transition point.
+    -   **Left**: Event-Triggered Average of Change Scores. Shows velocity behavior around transitions.
+    -   **Right**: Violin plots of change score distributions at transition (Y-axis fixed to [-2, 2]).
 
 2.  **`benchmark_fig3_AB_style.png`**
-    -   **Left**: Ethogram (Barcode plot) showing the sequence of behaviors over a specific time window.
+    -   **Left**: Ethogram showing behavioral sequences (5-7 minute window).
     -   **Right**: Histogram of state durations for each method.
+
+3.  **`statistics.csv`**
+    -   Machine-readable table containing counts of classes, transitions, and average durations.
+
+4.  **`summary.md`**
+    -   A Markdown summary of the run results, mirroring the table in `statistics.csv`.
 
 ## troubleshooting
 

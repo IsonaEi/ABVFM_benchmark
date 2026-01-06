@@ -74,4 +74,10 @@ sources/
 **/Data/
 
 # Cloned dependencies (if strictly requested to only git own code)
-# DA3_Mouse_Height/Depth-Anything-3/
+DA3_Mouse_Height/Depth-Anything-3/
+castle-ai-feature-support-dinov3-model/
+DA3_Mouse_Height/
+
+# results
+Benchmark/results/
+B-soid/*.txt

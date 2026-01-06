@@ -10,8 +10,8 @@ fps: null  # If null, extract from video file
 
 # UMAP Parameters
 umap_params:
-  n_neighbors: 60
-  min_dist: 0.0
+  n_neighbors: 100
+  min_dist: 0.1
   n_components: 3
   random_state: 43
 
