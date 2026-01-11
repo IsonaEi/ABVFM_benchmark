@@ -15,6 +15,14 @@ source venvs/castle/bin/activate
 python Benchmark/run_benchmark.py --config Benchmark/config.yaml
 ```
 
+### Dependency Note: GMFlow
+This project uses **GMFlow** for optical flow estimation. It is not tracked in this repository and must be cloned manually:
+
+```bash
+cd Benchmark/third_party
+git clone https://github.com/haofeixu/gmflow.git
+```
+
 ## 📊 Key Features
 
 - **Multi-Source Data Support**: Standardized loaders for KPMS (.h5), B-SOiD (.csv), and CASTLE (.csv) outputs.
