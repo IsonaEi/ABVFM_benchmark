@@ -104,29 +104,21 @@ def main():
     residuals = None
     slope, intercept = 0, 0
     
-    # Optical Flow Calculation (Priority: Pre-computed H5 > Video GPU)
+    # Optical Flow Analysis (Pre-computed Only)
     mask_path = config['paths'].get('mask_data')
     mask = None
     if mask_path and os.path.exists(mask_path): 
         mask = loader.load_mask(mask_path)
 
-    flow_save_path = os.path.join(result_dir, "optical_flow_magnitude.npy")
+    flow_magnitude = None
     h5_flow_path = config['paths'].get('optical_flow_file')
 
     if h5_flow_path and os.path.exists(h5_flow_path):
         print(f"Using pre-computed optical flow from: {h5_flow_path}")
-        if mask is None:
-             print("WARNING: Using pre-computed flow but NO MASK provided. Result will be unmasked mean.")
-        else:
-             print("Applying mask to pre-computed flow...")
-        
         flow_magnitude = physics.compute_masked_flow_from_h5(h5_flow_path, mask=mask)
-        np.save(flow_save_path, flow_magnitude)
-        
-    elif video_path and os.path.exists(video_path) and not args.skip_gpu:
-        if mask is None:
-            print("WARNING: No mask found! Optical Flow will be unmasked (NOT RECOMMENDED).")
-        flow_magnitude = physics.compute_optical_flow_gpu(video_path, mask=mask, save_path=flow_save_path)
+    else:
+        print("Note: Optical flow file not found or skipped. Residual analysis will be disabled.")
+        print("To generate optical flow, use the separate 'OpticalFlow' sub-project.")
         
     # --- Residual Motion Analysis (Motion-Pose Discrepancy) ---
     if flow_magnitude is not None and kinematics.get('velocity') is not None:
