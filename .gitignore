@@ -33,6 +33,7 @@ DLC/*/evaluation-results/
 DLC/*/dlc-models/
 DLC/*/dlc-models-pytorch/
 DLC/*/temp/
+DLC/*/evaluation-results-pytorch
 
 # Large Binary & Data File Extensions
 *.h5
@@ -74,9 +75,11 @@ sources/
 **/Data/
 
 # Cloned dependencies (if strictly requested to only git own code)
-DA3_Mouse_Height/Depth-Anything-3/
+
 castle-ai-feature-support-dinov3-model/
-DA3_Mouse_Height/
+DA3_Mouse_Height/Depth-Anything-3/
+DA3_Mouse_Height/results/
+
 
 # results
 Benchmark/results/

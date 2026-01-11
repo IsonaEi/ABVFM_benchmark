@@ -6,9 +6,10 @@ from kpms_custom.utils.logging import get_logger
 logger = get_logger()
 
 class MotifMerger:
-    def __init__(self, results, threshold_frames=10):
+    def __init__(self, results, min_frequency=0.005):
         self.results = results
-        self.threshold = threshold_frames
+        self.min_frequency = min_frequency
+        self.threshold_frames = None # Calculated later
         
     def calculate_centroids(self):
         """Calculates centroids for all motifs in latent space."""
@@ -56,47 +57,38 @@ class MotifMerger:
         return self.centroids
 
     def identify_motif_types(self):
-        """Identifies Stable vs Short motifs."""
+        """Identifies Stable vs Short motifs based on frequency."""
         self.stable_motifs = []
         self.short_motifs = []
         
-        z_seqs = []
-        # Reconstruct list structure for run duration check
-        # Or just use the flattened one with caution?
-        # Ideally we iterate per session to avoid boundary errors.
-        # But we already flattened.
-        # Let's assume flattened is okay if we don't care about session boundaries being < threshold (rare).
-        # Better: use the original lists if stored? I didn't store.
-        # Let's just use flattened but split by 0-pad trick if I had indices.
-        # Simple run length on flattened:
+        # 1. Calculate Total Frames to determine Count Threshold
+        # We need the total duration of the experiment (valid frames)
+        if hasattr(self, 'z_flat'):
+            total_frames = len(self.z_flat)
+        else:
+            # Should be calculated in calculate_centroids
+            raise ValueError("Run calculate_centroids first to flatten data.")
+            
+        self.threshold_frames = int(total_frames * self.min_frequency)
+        logger.info(f"Merging Threshold: {self.min_frequency:.2%} of {total_frames} frames = {self.threshold_frames} frames")
         
-        runs = np.diff(np.concatenate(([0], (self.z_flat == -999).astype(int), [0]))) # dummy
-        # Actually just iterate unique motifs
+        # 2. Count Occurrences
+        # Logic change: instead of "max run length", we check "total occurrence" (frequency)
+        # The user request said: "ratio 0.05% below merge to other" implies total frequency.
         
+        counts = {}
         for m in self.uniq_motifs:
-            is_stable = False
-            # Find runs of m
-            # A run is strict sequence of m
-            # We want Max Duration of m > threshold
+            counts[m] = np.sum(self.z_flat == m)
             
-            # Create boolean mask
-            mask = (self.z_flat == m).astype(np.int8)
-            # Find start/end of 1s
-            diffs = np.diff(np.concatenate(([0], mask, [0])))
-            starts = np.where(diffs == 1)[0]
-            ends = np.where(diffs == -1)[0]
+        for m in self.uniq_motifs:
+            count = counts[m]
             
-            if len(starts) > 0:
-                durations = ends - starts
-                if np.any(durations >= self.threshold):
-                    is_stable = True
-            
-            if is_stable:
+            if count >= self.threshold_frames:
                 self.stable_motifs.append(m)
             else:
                 self.short_motifs.append(m)
                 
-        logger.info(f"Identified {len(self.stable_motifs)} stable, {len(self.short_motifs)} short motifs.")
+        logger.info(f"Identified {len(self.stable_motifs)} stable, {len(self.short_motifs)} short motifs (Count < {self.threshold_frames}).")
         return self.stable_motifs, self.short_motifs
 
     def suggest_merges(self):
@@ -147,7 +139,7 @@ class MotifMerger:
         
         with open(strategy_path, "w") as f:
             f.write("# Motif Merging Strategy\n")
-            f.write(f"Threshold: {self.threshold} frames\n")
+            f.write(f"Min Frequency: {self.min_frequency:.2%} (Count threshold: {self.threshold_frames})\n")
             f.write("## Merges\n| Target | Sources |\n|---|---|\n")
             for group in self.syllables_to_merge:
                 f.write(f"| {group[0]} | {group[1:]} |\n")

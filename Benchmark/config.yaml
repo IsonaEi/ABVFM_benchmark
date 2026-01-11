@@ -1,0 +1,60 @@
+# Benchmark Configuration
+
+paths:
+  keypoint_data: "/home/isonaei/ABVFM_benchmark/Benchmark/keypoint_data/ctrl_30fpsDLC_HrnetW32_open_field_8_pointsJan2shuffle1_detector_best-270_snapshot_best-220.h5"
+  video_data: "/home/isonaei/ABVFM_benchmark/data/temp/ctrl_30fps.mp4"
+  mask_data: "/home/isonaei/ABVFM_benchmark/castle-ai-feature-support-dinov3-model/projects/2026-01-05-17-00-40-Project_ctrl_30fps.mp4/track/ctrl_30fps.mp4/mask_list.h5"
+  dino_embeddings: "/home/isonaei/ABVFM_benchmark/castle-ai-feature-support-dinov3-model/projects/2026-01-05-17-00-40-Project_ctrl_30fps.mp4/latent/dinov3_vitb16/ctrl_30fps_ROI_1_dinov3_vitb16_ctr_rmbg.npz"
+  optical_flow_file: "/home/isonaei/ABVFM_benchmark/Benchmark/results/run_20260107_165332/optical_flow.h5"
+
+methods:
+  KPMS:
+    path: "/home/isonaei/ABVFM_benchmark/Benchmark/lable_data/KPMS.h5"
+    format: "KPMS" 
+    enabled: True
+  CASTLE:
+    path: "/home/isonaei/ABVFM_benchmark/Benchmark/lable_data/CASTLE.csv"
+    format: "CASTLE"
+    enabled: True
+  BSOID_W5_N100_D01:
+    path: "/home/isonaei/ABVFM_benchmark/Benchmark/lable_data/bsoid_w5_n100_d01.csv"
+    format: "BSOID"
+    enabled: True
+  BSOID_W7_N60_D01:
+    path: "/home/isonaei/ABVFM_benchmark/Benchmark/lable_data/bsoid_w7_n60_d01.csv"
+    format: "BSOID"
+    enabled: True
+  BSOID_W12_N60_D01:
+    path: "/home/isonaei/ABVFM_benchmark/Benchmark/lable_data/bsoid_w12_n60_d01.csv"
+    format: "BSOID"
+    enabled: True
+  BSOID_W10_N150_D00:
+    path: "/home/isonaei/ABVFM_benchmark/Benchmark/lable_data/bsoid_w10_n150_d00.csv"
+    format: "BSOID"
+    enabled: True
+  BSOID_W60_N150_D01:
+    path: "/home/isonaei/ABVFM_benchmark/Benchmark/lable_data/bsoid_w60_n150_d01.csv"
+    format: "BSOID"
+    enabled: True
+
+params:
+  fps: 30.0
+  sigma: 1.0 # Added missing param
+  pixel_per_mm: 1.0 
+  ssi_window_sec: 0.5
+
+
+# Visualization
+plot:
+  colors:
+    # Pastel but high contrast (Deep Tone -> Pastel Tone)
+    # CASTLE: Blue
+    CASTLE: ["#2E5EAA", "#83C5BE"] 
+    # B-SOiD: Green
+    BSOID: ["#2A9D8F", "#A7C957"]
+    # KPMS: Orange/Red
+    KPMS: ["#E76F51", "#F4A261"]
+    
+  font_size_title: 20
+  font_size_label: 16
+  font_size_tick: 14

@@ -3,11 +3,11 @@
 
 # --- Project Paths ---
 # Where the Keypoint-MoSeq project structure will be created
-project_dir: /home/isonaei/ABVFM/KPMS/results/current_project
+project_dir: /home/isonaei/ABVFM_benchmark/KPMS/results/current_project
 # Where the input videos are located
-video_dir: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos
+video_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos
 # Where the pose data is (usually same as video_dir or separate)
-data_dir: /home/isonaei/ABVFM/DLC/open_field_8_points-MX-2026-01-02/videos
+data_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos
 
 # --- Project Settings ---
 project_config:
@@ -22,7 +22,7 @@ preprocess:
 # --- Model Parameters ---
 model_params:
   latent_dim: 0.9      # float < 1.0 for variance ratio, or int > 1 for component count
-  num_iters: 400       # Total iterations for full training
+  num_iters: 200       # Total iterations for full training
   ar_warmup_iters: 50  # Iterations for AR-only warmup
   seed: 42             # Random seed for reproducibility
   added_noise_level: 1.0
@@ -46,9 +46,17 @@ tuning:
   
   # These are auto-updated by 'kpms scan'
   # You can also set them manually
-  ar_kappa: 1000000
-  full_kappa: 70000
-  # Legacy support
+  # Manually defined experiments (AR, Full)
+  kappa_experiments:
+    - [1.0e+06, 7.0e+04]
+    - [2.0e+06, 3.0e+05]
+    - [1.0e+06, 3.3e+04]
+    - [1.0e+09, 2.0e+06]
+    - [1.0e+05, 5.0e+03]
+    
+  # Legacy single values (will be ignored if experiments are running)
+  ar_kappa: null
+  full_kappa: null
   full_kappa_ratio: none
 
 # --- Training Execution ---
@@ -59,16 +67,16 @@ save_every_n_iters: 25   # Checkpoint frequency
 analysis:
   perform_analysis: true
   merge_motifs: true      # Enable the Motif Merging strategy
-  merge_threshold: 12     # Minimum frames for a "Stable" motif
+  merge_threshold: 0.001 # Frequency threshold (0.1%)
   
   plot_trajectories: true
   plot_ethogram: true
   plot_stats: true
   plot_dendrogram: true
   plot_transition_graph: true
-  generate_grid_movies: true
-  generate_3d_scatter: true
-  generate_labeled_videos: true
+  generate_grid_movies: false
+  generate_3d_scatter: false
+  generate_labeled_videos: false
 
   # Viz Details
   trajectories:
@@ -78,13 +86,13 @@ analysis:
   grid_movies:
     pre: 15   # Frames before
     post: 15  # Frames after
-    rows: 3
-    cols: 3
+    rows: 4
+    cols: 4
     plot_options:
       keypoints_only: false
 
   labeled_videos:
-    num_videos: 5
+    num_videos: 3
     draw_skeleton: true
 
   transition_graph:
@@ -94,7 +102,7 @@ analysis:
     hide_self_transitions: true
 
   stats:
-    min_frequency: 0.005
+    min_frequency: 0.01
     groupby: ["group"]
     
   ethogram:

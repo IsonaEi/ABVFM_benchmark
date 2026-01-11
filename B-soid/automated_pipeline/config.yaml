@@ -41,6 +41,14 @@ optimization:
 # Parameter Search Configuration
 param_search:
   enabled: true
-  window_sizes_ms: [60, 100, 200, 300, 500, 700, 900] # Full clean re-run
+  type: "grid_search" # explicit type
+  # Window Sizes in Frames (Refined Search)
+  window_sizes_frames: [2, 3, 4, 5, 6, 7]
+  
+  # UMAP Parameter Search Space
+  umap_prams_search:
+    n_neighbors: [25, 60, 100, 250]
+    min_dist: [0.0, 0.05, 0.1, 0.2]
+    
   # Random seed is fixed to 42 in standard config, so we don't list it here for search unless needed
 

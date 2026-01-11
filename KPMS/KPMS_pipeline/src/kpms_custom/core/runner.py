@@ -41,11 +41,35 @@ def run_training(config_path, restarts=None):
     
     project_dir, data, metadata, pca = _load_and_prep(config)
     
+    experiments = config.get('tuning', {}).get('kappa_experiments', [])
     n_runs = config.get('num_fitting_restarts', 1)
     
-    for i in range(n_runs):
-        logger.info(f"--- Training Run {i+1}/{n_runs} ---")
-        fit_model(data, metadata, pca, config, project_dir, name_suffix=f"-{i}")
+    if experiments:
+        logger.info(f"Found {len(experiments)} Kappa experiments in config.")
+        for idx, (ar_k, full_k) in enumerate(experiments):
+            logger.info(f"=== Experiment {idx+1}/{len(experiments)}: AR={ar_k:.1e}, Full={full_k:.1e} ===")
+            
+            # Create a localized config for this run
+            exp_config = config.copy()
+            if 'tuning' not in exp_config: exp_config['tuning'] = {}
+            exp_config['tuning']['ar_kappa'] = ar_k
+            exp_config['tuning']['full_kappa'] = full_k
+            
+            # Suffix for the model
+            # e.g., "20230101-1200-exp1"
+            # We can rely on date + suffix
+            suffix = f"-exp{idx+1}_ar{ar_k:.0e}_full{full_k:.0e}"
+            # Clean scientific notation for filename (1.0e+06 -> 1e6)
+            suffix = suffix.replace('+', '')
+            
+            for r in range(n_runs):
+                run_suffix = suffix + (f"-r{r}" if n_runs > 1 else "")
+                fit_model(data, metadata, pca, exp_config, project_dir, name_suffix=run_suffix)
+    else:
+        # Legacy / Single Run
+        for i in range(n_runs):
+            logger.info(f"--- Training Run {i+1}/{n_runs} ---")
+            fit_model(data, metadata, pca, config, project_dir, name_suffix=f"-{i}")
         
     logger.info("Training complete.")
 
@@ -184,9 +208,10 @@ def run_merging(config_path, model_name):
     except:
         results = kpms.extract_results(model, metadata=metadata, project_dir=project_dir, model_name=model_name, save_results=False)
     
-    threshold = config['analysis'].get('merge_threshold', 10)
+    # Threshold (now frequency)
+    threshold = config['analysis'].get('merge_threshold', 0.005)
     
-    merger = MotifMerger(results, threshold_frames=threshold)
+    merger = MotifMerger(results, min_frequency=threshold)
     merger.calculate_centroids()
     merger.identify_motif_types()
     merger.suggest_merges()
