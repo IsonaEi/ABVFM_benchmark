@@ -3,7 +3,7 @@ import shutil
 import numpy as np
 from datetime import datetime
 import keypoint_moseq as kpms
-from kpms_custom.utils.logging import get_logger
+from kpms_custom.utils.logger_utils import get_logger
 from kpms_custom.data.preprocessor import calculate_latent_dim
 
 logger = get_logger()

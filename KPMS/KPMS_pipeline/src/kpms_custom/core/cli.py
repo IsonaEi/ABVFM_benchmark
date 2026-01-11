@@ -1,6 +1,6 @@
 import argparse
 import sys
-from kpms_custom.utils.logging import setup_logger
+from kpms_custom.utils.logger_utils import setup_logger
 from kpms_custom.core import runner
 import warnings
 import matplotlib

@@ -1,5 +1,6 @@
 # Python & Environment
 __pycache__/
+*.jupyter
 *.py[cod]
 *$py.class
 venvs/

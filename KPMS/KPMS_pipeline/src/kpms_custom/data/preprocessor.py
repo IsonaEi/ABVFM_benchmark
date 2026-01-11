@@ -1,6 +1,6 @@
 import numpy as np
 import keypoint_moseq as kpms
-from kpms_custom.utils.logging import get_logger
+from kpms_custom.utils.logger_utils import get_logger
 from kpms_custom.data.loader import filter_bad_bodyparts, interpolate_data
 
 logger = get_logger()

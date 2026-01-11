@@ -1,112 +1,80 @@
-# KPMS Pipeline Configuration
-# Version: 2.0 (Refactored)
-
-# --- Project Paths ---
-# Where the Keypoint-MoSeq project structure will be created
-project_dir: /home/isonaei/ABVFM_benchmark/KPMS/results/current_project
-# Where the input videos are located
-video_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos
-# Where the pose data is (usually same as video_dir or separate)
-data_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos
-
-# --- Project Settings ---
-project_config:
-  video_extension: mp4
-  bodyparts: AUTO  # or list [nose, left_ear, ...]
-
-# --- Preprocessing ---
-preprocess:
-  fps: 30.0
-  # Filter/interpolation settings can go here if we add them to preprocessor.py
-
-# --- Model Parameters ---
-model_params:
-  latent_dim: 0.9      # float < 1.0 for variance ratio, or int > 1 for component count
-  num_iters: 200       # Total iterations for full training
-  ar_warmup_iters: 50  # Iterations for AR-only warmup
-  seed: 42             # Random seed for reproducibility
-  added_noise_level: 1.0
-  
-  error_estimator:
-    intercept: 1.0
-    slope: -0.5
-
-  # Kappa Scan Settings
-  kappa_scan:
-    num_steps: 10
-    min: 1000.0
-    max: 1.0e+12
-    ar_iters: 50
-    full_iters: 75
-
-# --- Tuning / Hyperparameters ---
-tuning:
-  target_motif_duration: 400  # Target median duration in ms
-  tolerance: 0.1            # Acceptance tolerance (10%)
-  
-  # These are auto-updated by 'kpms scan'
-  # You can also set them manually
-  # Manually defined experiments (AR, Full)
-  kappa_experiments:
-    - [1.0e+06, 7.0e+04]
-    - [2.0e+06, 3.0e+05]
-    - [1.0e+06, 3.3e+04]
-    - [1.0e+09, 2.0e+06]
-    - [1.0e+05, 5.0e+03]
-    
-  # Legacy single values (will be ignored if experiments are running)
-  ar_kappa: null
-  full_kappa: null
-  full_kappa_ratio: none
-
-# --- Training Execution ---
-num_fitting_restarts: 1  # How many independent models to train
-save_every_n_iters: 25   # Checkpoint frequency
-
-# --- Analysis & Visualization ---
 analysis:
-  perform_analysis: true
-  merge_motifs: true      # Enable the Motif Merging strategy
-  merge_threshold: 0.001 # Frequency threshold (0.1%)
-  
-  plot_trajectories: true
-  plot_ethogram: true
-  plot_stats: true
-  plot_dendrogram: true
-  plot_transition_graph: true
-  generate_grid_movies: false
+  ethogram:
+    cmap: Pastel
   generate_3d_scatter: false
+  generate_grid_movies: false
   generate_labeled_videos: false
-
-  # Viz Details
-  trajectories:
-    save_gifs: true
-    save_mp4s: false
-    
   grid_movies:
-    pre: 15   # Frames before
-    post: 15  # Frames after
-    rows: 4
     cols: 4
     plot_options:
       keypoints_only: false
-
+    post: 15
+    pre: 15
+    rows: 4
   labeled_videos:
-    num_videos: 3
     draw_skeleton: true
-
-  transition_graph:
-    layout: spring
-    node_size_scale: 100
-    edge_width_scale: 2
-    hide_self_transitions: true
-
-  stats:
-    min_frequency: 0.01
-    groupby: ["group"]
-    
-  ethogram:
-    cmap: Pastel
-  
+    num_videos: 3
+  merge_motifs: true
+  merge_threshold: 0.001
+  perform_analysis: true
+  plot_dendrogram: true
+  plot_ethogram: true
+  plot_stats: true
+  plot_trajectories: true
+  plot_transition_graph: true
   scatter_3d:
     palette: Pastel
+  stats:
+    groupby:
+    - group
+    min_frequency: 0.01
+  trajectories:
+    save_gifs: true
+    save_mp4s: false
+  transition_graph:
+    edge_width_scale: 2
+    hide_self_transitions: true
+    layout: spring
+    node_size_scale: 100
+data_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos
+model_params:
+  added_noise_level: 1.0
+  ar_warmup_iters: 50
+  error_estimator:
+    intercept: 0.4683560575228594
+    slope: -0.6230969439805888
+  kappa_scan:
+    ar_iters: 50
+    full_iters: 75
+    max: 1000000000000.0
+    min: 1000.0
+    num_steps: 10
+  latent_dim: 0.95
+  num_iters: 200
+  seed: 42
+num_fitting_restarts: 1
+pca:
+  whiten: true
+preprocess:
+  fps: 30.0
+project_config:
+  bodyparts: AUTO
+  video_extension: mp4
+project_dir: /home/isonaei/ABVFM_benchmark/KPMS/results/exp_20260111_high_res
+save_every_n_iters: 25
+tuning:
+  ar_kappa: null
+  full_kappa: null
+  full_kappa_ratio: none
+  kappa_experiments:
+  - - 1000000.0
+    - 10000.0
+  - - 100000.0
+    - 1000.0
+  - - 10000.0
+    - 100.0
+  - - 1000.0
+    - 10.0
+  target_motif_duration: 200
+  tolerance: 0.1
+video_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos

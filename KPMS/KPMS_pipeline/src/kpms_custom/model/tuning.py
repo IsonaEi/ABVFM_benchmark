@@ -1,7 +1,7 @@
 import numpy as np
 import copy
 import keypoint_moseq as kpms
-from kpms_custom.utils.logging import get_logger
+from kpms_custom.utils.logger_utils import get_logger
 from kpms_custom.model.trainer import fit_model
 from kpms_custom.data.preprocessor import calculate_latent_dim
 

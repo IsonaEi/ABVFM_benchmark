@@ -4,7 +4,7 @@ import keypoint_moseq as kpms
 from pathlib import Path
 
 from kpms_custom.utils.config import load_config, save_config
-from kpms_custom.utils.logging import get_logger
+from kpms_custom.utils.logger_utils import get_logger
 from kpms_custom.data.loader import load_h5_files, parse_dlc_data, detect_fps
 from kpms_custom.data.preprocessor import train_pca, prepare_for_kpms
 from kpms_custom.model.trainer import setup_project, fit_model
@@ -188,8 +188,10 @@ def _perform_viz_pipeline(results, out_dir, coords, confs, bodyparts, config, pr
          num_videos = config['analysis'].get('labeled_videos', {}).get('num_videos', 5)
          generate_labeled_video(results, out_dir, video_dir, num_videos=num_videos)
 
-def run_merging(config_path, model_name):
+def run_merging(config_path, model_name, merge_suffix="_merged", override_threshold=None):
     config = load_config(config_path)
+    if override_threshold is not None:
+        config['analysis']['merge_threshold'] = override_threshold
     project_dir = config['project_dir']
     
     if not model_name:
@@ -218,7 +220,7 @@ def run_merging(config_path, model_name):
     new_results = merger.apply_merges(results, project_dir, model_name)
     
     # Create new folder for merged results
-    merged_model_name = f"{model_name}_merged"
+    merged_model_name = f"{model_name}{merge_suffix}"
     merged_model_dir = Path(project_dir) / merged_model_name
     merged_model_dir.mkdir(parents=True, exist_ok=True)
     

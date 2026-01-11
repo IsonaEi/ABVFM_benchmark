@@ -1,7 +1,7 @@
 import numpy as np
 import keypoint_moseq as kpms
 from pathlib import Path
-from kpms_custom.utils.logging import get_logger
+from kpms_custom.utils.logger_utils import get_logger
 
 logger = get_logger()
 

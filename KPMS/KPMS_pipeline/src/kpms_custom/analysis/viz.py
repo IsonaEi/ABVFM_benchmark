@@ -6,7 +6,7 @@ import plotly.express as px
 import pandas as pd
 from pathlib import Path
 import re
-from kpms_custom.utils.logging import get_logger
+from kpms_custom.utils.logger_utils import get_logger
 
 logger = get_logger()
 

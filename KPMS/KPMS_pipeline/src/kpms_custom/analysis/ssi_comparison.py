@@ -19,7 +19,13 @@ from Benchmark.src.metrics import MetricsEngine
 from kpms_custom.utils.config import load_config
 from kpms_custom.core.runner import _load_and_prep
 
+import argparse
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dir", type=str, help="Project directory containing experiments")
+    args = parser.parse_args()
+    
     print("=== KPMS SSI Analysis (Camellia Edition) ===")
     
     # 1. Setup & Load Embeddings
@@ -28,7 +34,7 @@ def main():
     loader = DataLoader(config_path=bench_config_path)
     metrics = MetricsEngine()
     
-    # Path to DINO features (Standard used in B-SOiD comparison)
+    # Path to DINO features 
     dino_path = "/home/isonaei/ABVFM_benchmark/castle-ai-feature-support-dinov3-model/projects/2026-01-05-17-00-40-Project_ctrl_30fps.mp4/latent/dinov3_vitb16/ctrl_30fps_ROI_1_dinov3_vitb16_ctr_rmbg.npz"
     features = loader.load_embeddings(dino_path)
     
@@ -42,11 +48,15 @@ def main():
     # 2. KPMS Setup
     config_path = "config/default_config.yaml"
     config = load_config(config_path)
-    base_results_dir = Path(config['project_dir'])
+    
+    if args.dir:
+        base_results_dir = Path(args.dir)
+    else:
+        base_results_dir = Path(config['project_dir'])
     
     # 3. Find Experiments
-    # Look for folders starting with "2026"
-    exp_dirs = sorted([d for d in base_results_dir.iterdir() if d.is_dir() and d.name.startswith("2026")])
+    # Look for folders starting with "2026", "ext", or "original"
+    exp_dirs = sorted([d for d in base_results_dir.iterdir() if d.is_dir() and (d.name.startswith("2026") or d.name.startswith("ext") or d.name == "original")])
     
     all_ssi_data = [] # List of dicts
     summary_stats = []
@@ -142,6 +152,7 @@ def main():
                     'Median_SSI': np.median(ssi_scores),
                     'Mean_SSI': np.mean(ssi_scores),
                     'N_Clusters': stats['n_classes'],
+                    'N_Segments': stats['n_transitions'] + 1,
                     'Median_Duration_ms': stats['median_duration_ms']
                 })
                 print(f"  > SSI Median: {np.median(ssi_scores):.3f} ({iters_label}, {merge_label})")
@@ -176,6 +187,7 @@ def main():
         'Median_SSI': np.median(rand_ssi),
         'Mean_SSI': np.mean(rand_ssi),
         'N_Clusters': 40,
+        'N_Segments': stats_rand['n_transitions'] + 1,
         'Median_Duration_ms': stats_rand['median_duration_ms']
     })
 
@@ -228,7 +240,12 @@ def plot_syllable_usage(ssi_data, out_dir, results_dict):
     """
     # Filter for a representative method to avoid clutter. 
     # Let's use 'Default (AR=1e6)' and 'Exp 4 (AR=1e9)' as they are top performers.
-    target_methods = ["Default (AR=1e6)", "Exp 4 (AR=1e9, Full=2e6)"]
+    target_methods = [
+        "Exp 1 (AR=1e6, Full=1e4)", 
+        "Exp 2 (AR=1e5, Full=1e3)",
+        "Exp 3 (AR=1e4, Full=1e2)",
+        "Exp 4 (AR=1e3, Full=10)"
+    ]
     
     # helper to compute distribution
     def get_distribution(labels):
@@ -268,6 +285,20 @@ def plot_syllable_usage(ssi_data, out_dir, results_dict):
                 'Probability': p
             })
             
+    if not plot_data:
+        print("Warning: No target methods found for syllable distribution plot. Using all available methods.")
+        for exp_name, labels in results_dict.items():
+            base, iters, merge = parse_exp_name_for_plot(exp_name)
+            if iters != "200 iters": continue
+            probs = get_distribution(labels)
+            for rank, p in enumerate(probs):
+                plot_data.append({
+                    'Method': base,
+                    'Merge': merge,
+                    'Rank': rank + 1,
+                    'Probability': p
+                })
+                
     df_dist = pd.DataFrame(plot_data)
     
     plt.figure(figsize=(12, 6))
@@ -283,11 +314,16 @@ def plot_syllable_usage(ssi_data, out_dir, results_dict):
 def parse_exp_name_for_plot(name):
     # Returns (BaseName, IterationsLabel, MergeLabel)
     is_merged_0pt5 = "_merged_0pt5" in name
-    is_merged_0pt1 = "_merged" in name and not is_merged_0pt5 # Since I renamed, standard _merged is new 0.1%
+    is_merged_0pt1 = "_merged_0pt1" in name
+    is_merged_0pt05 = "_merged_0pt05" in name
+    is_legacy_merged = "_merged" in name and not (is_merged_0pt5 or is_merged_0pt1 or is_merged_0pt05)
     
     is_extended = "_extended" in name
     
-    clean_name = name.replace("_extended", "").replace("_merged_0pt5", "").replace("_merged", "")
+    # Clean name by removing all known suffixes
+    clean_name = name.replace("_extended", "")
+    for suffix in ["_merged_0pt5", "_merged_0pt1", "_merged_0pt05", "_merged"]:
+        clean_name = clean_name.replace(suffix, "")
     
     iter_label = "400 iters" if is_extended else "200 iters"
     
@@ -295,21 +331,31 @@ def parse_exp_name_for_plot(name):
         merge_label = "0.5% (High)"
     elif is_merged_0pt1:
         merge_label = "0.1% (Med)"
-    else:
+    elif is_merged_0pt05:
         merge_label = "0.05% (Low)"
+    elif is_legacy_merged:
+        merge_label = "0.1% (Legacy)"
+    else:
+        merge_label = "0.0% (Unmerged)"
     
     if "exp" not in clean_name and "Default" not in clean_name and "2026" in clean_name:
          if clean_name.endswith("-0"):
              base_name = "Default (AR=1e6)"
          else:
              base_name = clean_name
+    elif clean_name == "original":
+        base_name = "Exp 1 (Original)"
+    elif clean_name == "ext100":
+        base_name = "Exp 1 (+100 iters)"
+    elif clean_name == "ext200":
+        base_name = "Exp 1 (+200 iters)"
     elif "exp" in clean_name:
         try:
             parts = clean_name.split('-')
-            if "exp1" in clean_name: base_name = "Exp 1 (AR=1e6, Full=7e4)"
-            elif "exp2" in clean_name: base_name = "Exp 2 (AR=2e6, Full=3e5)"
-            elif "exp3" in clean_name: base_name = "Exp 3 (AR=1e6, Full=3e4)"
-            elif "exp4" in clean_name: base_name = "Exp 4 (AR=1e9, Full=2e6)"
+            if "exp1" in clean_name: base_name = "Exp 1 (AR=1e6, Full=1e4)"
+            elif "exp2" in clean_name: base_name = "Exp 2 (AR=1e5, Full=1e3)"
+            elif "exp3" in clean_name: base_name = "Exp 3 (AR=1e4, Full=1e2)"
+            elif "exp4" in clean_name: base_name = "Exp 4 (AR=1e3, Full=10)"
             elif "exp5" in clean_name: base_name = "Exp 5 (AR=1e5, Full=5e3)"
             else: base_name = clean_name
         except:

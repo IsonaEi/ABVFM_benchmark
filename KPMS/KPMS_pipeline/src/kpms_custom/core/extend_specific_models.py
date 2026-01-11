@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.append("/home/isonaei/ABVFM_benchmark/KPMS/KPMS_pipeline/src")
 from kpms_custom.utils.config import load_config
 from kpms_custom.core.runner import _load_and_prep
-from kpms_custom.utils.logging import get_logger
+from kpms_custom.utils.logger_utils import get_logger
 
 logger = get_logger()
 

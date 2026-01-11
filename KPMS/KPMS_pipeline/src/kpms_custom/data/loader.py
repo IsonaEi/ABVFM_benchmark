@@ -3,7 +3,7 @@ import glob
 import pandas as pd
 import numpy as np
 import cv2
-from kpms_custom.utils.logging import get_logger
+from kpms_custom.utils.logger_utils import get_logger
 
 logger = get_logger()
 
