@@ -77,6 +77,8 @@ sources/
 # Catch-all for data directories
 **/data/
 **/Data/
+!KPMS/KPMS_pipeline/src/kpms_custom/data/
+
 
 # Cloned dependencies (if strictly requested to only git own code)
 
