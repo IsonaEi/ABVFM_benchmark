@@ -56,6 +56,10 @@ DLC/*/evaluation-results-pytorch
 *.pt
 *.pth
 
+# Exceptions for specific models
+!DLC/open_field_8_points-MX-2026-01-02/snapshot-best-760.pt
+!DLC/open_field_8_points-MX-2026-01-02/snapshot-detector-best-1190.pt
+
 # Generic CSVs (often data) - If you have config CSVs, we might need to exception them
 *.csv
 *.csv.tmp

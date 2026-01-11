@@ -1,0 +1,10 @@
+numpy
+pandas
+opencv-python
+matplotlib
+seaborn
+scikit-learn
+scipy
+h5py
+pyyaml
+markdown
