@@ -1,8 +1,8 @@
 # B-SOID Automated Pipeline Configuration
 
 # Input/Output
-input_dir: "/home/isonaei/ABVFM_benchmark/B-soid/input_data_full"  # Specific folder for this run
-output_dir: "/home/isonaei/ABVFM_benchmark/B-soid/results"
+input_dir: "/home/isonaei/ABVFM_benchmark/B-soid/input_data_full"
+output_dir: "/home/isonaei/ABVFM_benchmark/B-soid/results/run_20260118_01180458"
 bsoid_source_dir: "/home/isonaei/ABVFM_benchmark/venvs/b-soid-official/B-SOID_source"
 
 # Video Processing
@@ -34,21 +34,21 @@ mlp_params:
 
 # Optimization Parameters
 optimization:
-  min_cluster_size_range: [0.001, 0.01]  # 0.1% to 1.0%
-  min_duration_ms: 100
+  min_cluster_size_range: [0.0005, 0.005]  # 0.05% to 0.5%
+  min_duration_ms: 200
   steps: 10  # Number of steps in the range to test
 
 # Parameter Search Configuration
 param_search:
   enabled: true
   type: "grid_search" # explicit type
-  # Window Sizes in Frames (Refined Search)
-  window_sizes_frames: [2, 3, 4, 5, 6, 7]
+  # Window Sizes in Frames (3=100ms, 5=166ms at 30fps)
+  window_sizes_frames: [3]
   
-  # UMAP Parameter Search Space
+  # UMAP Parameter Search Space (Reduced for speed)
   umap_prams_search:
-    n_neighbors: [25, 60, 100, 250]
-    min_dist: [0.0, 0.05, 0.1, 0.2]
+    n_neighbors: [60]
+    min_dist: [0.05]
     
   # Random seed is fixed to 42 in standard config, so we don't list it here for search unless needed
 

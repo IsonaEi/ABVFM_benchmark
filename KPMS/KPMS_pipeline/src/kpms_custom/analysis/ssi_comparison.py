@@ -55,8 +55,10 @@ def main():
         base_results_dir = Path(config['project_dir'])
     
     # 3. Find Experiments
+    # 3. Find Experiments - Auto-discovery for general use
     # Look for folders starting with "2026", "ext", or "original"
     exp_dirs = sorted([d for d in base_results_dir.iterdir() if d.is_dir() and (d.name.startswith("2026") or d.name.startswith("ext") or d.name == "original")])
+    print(f"Found {len(exp_dirs)} experiments.")
     
     all_ssi_data = [] # List of dicts
     summary_stats = []
@@ -241,10 +243,10 @@ def plot_syllable_usage(ssi_data, out_dir, results_dict):
     # Filter for a representative method to avoid clutter. 
     # Let's use 'Default (AR=1e6)' and 'Exp 4 (AR=1e9)' as they are top performers.
     target_methods = [
-        "Exp 1 (AR=1e6, Full=1e4)", 
-        "Exp 2 (AR=1e5, Full=1e3)",
-        "Exp 3 (AR=1e4, Full=1e2)",
-        "Exp 4 (AR=1e3, Full=10)"
+        "Scenario I (AR=1e14, Full=1e12)",
+        "Scenario J (AR=1e12, Full=1e10)",
+        "Scenario F (AR=1e10, Full=1e8)",
+        "Scenario A (AR=1e7, Full=1e5)"
     ]
     
     # helper to compute distribution
@@ -312,57 +314,56 @@ def plot_syllable_usage(ssi_data, out_dir, results_dict):
     plt.savefig(out_dir / "syllable_distribution_histogram.png", dpi=300)
 
 def parse_exp_name_for_plot(name):
-    # Returns (BaseName, IterationsLabel, MergeLabel)
+    """
+    Parses experiment folder name to extracting labeling info.
+    Returns (BaseName, IterationsLabel, MergeLabel)
+    """
+    # Dynamic parsing logic for plotting labels
+    import re
+    
+    # Check for merges first
     is_merged_0pt5 = "_merged_0pt5" in name
     is_merged_0pt1 = "_merged_0pt1" in name
     is_merged_0pt05 = "_merged_0pt05" in name
-    is_legacy_merged = "_merged" in name and not (is_merged_0pt5 or is_merged_0pt1 or is_merged_0pt05)
     
-    is_extended = "_extended" in name
-    
-    # Clean name by removing all known suffixes
-    clean_name = name.replace("_extended", "")
+    clean_name = name
     for suffix in ["_merged_0pt5", "_merged_0pt1", "_merged_0pt05", "_merged"]:
         clean_name = clean_name.replace(suffix, "")
-    
-    iter_label = "400 iters" if is_extended else "200 iters"
-    
-    if is_merged_0pt5:
-        merge_label = "0.5% (High)"
-    elif is_merged_0pt1:
-        merge_label = "0.1% (Med)"
-    elif is_merged_0pt05:
-        merge_label = "0.05% (Low)"
-    elif is_legacy_merged:
-        merge_label = "0.1% (Legacy)"
-    else:
-        merge_label = "0.0% (Unmerged)"
-    
-    if "exp" not in clean_name and "Default" not in clean_name and "2026" in clean_name:
-         if clean_name.endswith("-0"):
-             base_name = "Default (AR=1e6)"
-         else:
-             base_name = clean_name
-    elif clean_name == "original":
-        base_name = "Exp 1 (Original)"
-    elif clean_name == "ext100":
-        base_name = "Exp 1 (+100 iters)"
-    elif clean_name == "ext200":
-        base_name = "Exp 1 (+200 iters)"
-    elif "exp" in clean_name:
-        try:
-            parts = clean_name.split('-')
-            if "exp1" in clean_name: base_name = "Exp 1 (AR=1e6, Full=1e4)"
-            elif "exp2" in clean_name: base_name = "Exp 2 (AR=1e5, Full=1e3)"
-            elif "exp3" in clean_name: base_name = "Exp 3 (AR=1e4, Full=1e2)"
-            elif "exp4" in clean_name: base_name = "Exp 4 (AR=1e3, Full=10)"
-            elif "exp5" in clean_name: base_name = "Exp 5 (AR=1e5, Full=5e3)"
-            else: base_name = clean_name
-        except:
-            base_name = clean_name
-    else:
-        base_name = clean_name
         
+    iter_label = "200 iters" # Default for these experiments
+    
+    if is_merged_0pt5: merge_label = "0.5% (High)"
+    elif is_merged_0pt1: merge_label = "0.1% (Med)"
+    elif is_merged_0pt05: merge_label = "0.05% (Low)"
+    else: merge_label = "0.0% (Unmerged)"
+    
+    # Detect Parameter Settings from Name (e.g., ar1e07_full1e05)
+    # Mapping specific Exp 5, 6 & 7 signatures
+    if "ar1e14" in clean_name: base_name = "Scenario I (AR=1e14, Full=1e12)"
+    elif "ar1e12" in clean_name: base_name = "Scenario J (AR=1e12, Full=1e10)"
+    elif "ar1e10" in clean_name: base_name = "Scenario F (AR=1e10, Full=1e8)"
+    elif "ar1e09" in clean_name: base_name = "Scenario G (AR=1e9, Full=2e6)"
+    elif "ar1e08" in clean_name: base_name = "Scenario H (AR=1e8, Full=1e6)"
+    elif "ar1e07" in clean_name: base_name = "Scenario A (AR=1e7, Full=1e5)"
+    elif "ar1e06" in clean_name: base_name = "Scenario B (AR=1e6, Full=1e4)"
+    elif "ar1e05" in clean_name and "exp2" not in clean_name: base_name = "Scenario C (AR=1e5, Full=1e3)" 
+    elif "ar1e04" in clean_name: base_name = "Scenario D (AR=1e4, Full=1e2)"
+    elif "ar1e03" in clean_name: base_name = "Scenario E (AR=1e3, Full=10)"
+    
+    # Fallback/Legacy
+    elif "exp1" in clean_name and "0734" in clean_name: base_name = "Scenario A (AR=1e7)" 
+    elif "exp2" in clean_name and "0759" in clean_name: base_name = "Scenario B (AR=1e6)"
+    elif "exp3" in clean_name and "0824" in clean_name: base_name = "Scenario C (AR=1e5)"
+    elif "exp4" in clean_name and "0849" in clean_name: base_name = "Scenario D (AR=1e4)"
+    elif "exp5" in clean_name and "0914" in clean_name: base_name = "Scenario E (AR=1e3)"
+    else:
+        # Fallback generic parser
+        match = re.search(r"ar(\S+)_full(\S+)", clean_name)
+        if match:
+             base_name = f"Custom (AR={match.group(1)}, Full={match.group(2)})"
+        else:
+             base_name = clean_name
+             
     return base_name, iter_label, merge_label
 
 def parse_exp_name(name):

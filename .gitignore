@@ -24,6 +24,7 @@ KPMS/results/
 KPMS/docs/build/
 Benchmark/keypoint_data/
 Benchmark/lable_data/
+B-soid/input_data_full
 
 # DeepLabCut Project Specifics
 # Ignore all large subfolders in DLC projects but keep the structure and config
@@ -79,6 +80,7 @@ sources/
 **/data/
 **/Data/
 !KPMS/KPMS_pipeline/src/kpms_custom/data/
+**/.gradio/
 
 
 # Cloned dependencies (if strictly requested to only git own code)
@@ -94,4 +96,4 @@ OpticalFlow/pretrained/
 
 # results
 Benchmark/results/
-B-soid/*.txt
+

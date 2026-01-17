@@ -1,0 +1,9 @@
+numpy
+pandas
+matplotlib
+seaborn
+scikit-learn
+opencv-python
+pyyaml
+hdbscan
+umap-learn

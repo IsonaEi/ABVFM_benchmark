@@ -36,7 +36,7 @@ def run_step(name, cmd, cwd="/home/isonaei/ABVFM_benchmark/KPMS/KPMS_pipeline"):
 def main():
     setup_logger()
     logger = get_logger()
-    logger.info("=== KPMS High-Resolution Campaign V5 (Camellia) ===")
+    logger.info("=== KPMS Campaign V5 (Camellia) ===")
     
     python_bin = "/home/isonaei/ABVFM_benchmark/venvs/keypoint-moseq/bin/python"
     

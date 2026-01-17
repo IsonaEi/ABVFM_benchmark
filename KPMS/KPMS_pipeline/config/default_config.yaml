@@ -36,20 +36,20 @@ analysis:
     hide_self_transitions: true
     layout: spring
     node_size_scale: 100
-data_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos
+data_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos/supermodel
 model_params:
   added_noise_level: 1.0
   ar_warmup_iters: 50
   error_estimator:
-    intercept: 0.4683560575228594
-    slope: -0.6230969439805888
+    intercept: 0.8766958268641931
+    slope: -0.22796376020672313
   kappa_scan:
     ar_iters: 50
     full_iters: 75
     max: 1000000000000.0
     min: 1000.0
     num_steps: 10
-  latent_dim: 0.95
+  latent_dim: 0.9
   num_iters: 200
   seed: 42
 num_fitting_restarts: 1
@@ -60,21 +60,17 @@ preprocess:
 project_config:
   bodyparts: AUTO
   video_extension: mp4
-project_dir: /home/isonaei/ABVFM_benchmark/KPMS/results/exp_20260111_high_res
+project_dir: /home/isonaei/ABVFM_benchmark/KPMS/results/exp_20260117_2342
 save_every_n_iters: 25
 tuning:
   ar_kappa: null
   full_kappa: null
   full_kappa_ratio: none
   kappa_experiments:
-  - - 1000000.0
-    - 10000.0
-  - - 100000.0
-    - 1000.0
-  - - 10000.0
-    - 100.0
-  - - 1000.0
-    - 10.0
+  - - 100000000000000.0
+    - 1000000000000.0
+  - - 1000000000000.0
+    - 10000000000.0
   target_motif_duration: 200
   tolerance: 0.1
 video_dir: /home/isonaei/ABVFM_benchmark/DLC/open_field_8_points-MX-2026-01-02/videos

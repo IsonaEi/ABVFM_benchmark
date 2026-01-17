@@ -11,47 +11,102 @@ class PhysicsEngine:
     def __init__(self):
         pass
         
-    def _align_egocentric(self, kps, bodyparts):
+    def align_keypoints_egocentric(self, kps, bodyparts):
         """
-        Aligns keypoints to egocentric coordinates (Reference Point at origin).
-        Reference point: Centroid (KPMS default) or TailBase.
+        Aligns keypoints to egocentric coordinates:
+        1. Translation Invariant (Center at origin).
+        2. Rotation Invariance (Rotate so Spine is Vertical).
         """
-        # Calculate Centroid per frame
-        centroid = np.nanmean(kps, axis=1, keepdims=True) # (T, 1, 2)
-        kps_ego = kps - centroid
-        return kps_ego
+        print("Aligning keypoints (Centering + Rotation)...")
+        T, K, C = kps.shape
+        
+        # 1. Centering (Subtract Mean per frame)
+        centroid = np.nanmean(kps, axis=1, keepdims=True)
+        kps_centered = kps - centroid
+        
+        # 2. Rotation Matrix
+        # Define Spine Vector: TailBase -> Neck (or similar)
+        # Find indices again (helper needed or duplicate logic)
+        def find_bp(names):
+            for n in names:
+                matches = [i for i, b in enumerate(bodyparts) if n in b]
+                if matches: return matches[0]
+            return None
 
-    def compute_keypoint_change_score(self, kps, bodyparts, sigma=1.0):
+        neck_idx = find_bp(['neck', 'head', 'snout'])
+        tail_idx = find_bp(['tail_base', 'tail', 'mid_backend2'])
+        
+        if neck_idx is None or tail_idx is None:
+            print("Warning: Could not find Neck/Tail for rotation alignment. Skipping rotation.")
+            return kps_centered
+            
+        # Vector: Tail -> Neck
+        spine_vec = kps_centered[:, neck_idx] - kps_centered[:, tail_idx] # (T, 2)
+        
+        # Calculate angle of spine relative to vertical (Y-axis)
+        # Target: We want spine to point UP (0, 1) or RIGHT (1, 0). Let's maximize variance on X implies horizontal?
+        # Standard: Head Up (90 deg) or Right (0 deg).
+        # Let's align to Positive X-axis (0 radians).
+        
+        angles = np.arctan2(spine_vec[:, 1], spine_vec[:, 0]) # Current angle
+        
+        # We want to rotate by -angle to align with X-axis (0)
+        # Or if we want vertical, rotate by (pi/2 - angle)
+        
+        # Let's target X-axis alignment
+        theta = -angles
+        
+        c, s = np.cos(theta), np.sin(theta)
+        # Rotation Matrix per frame: R = [[c, -s], [s, c]]
+        # Apply to all K points: x' = x*c - y*s, y' = x*s + y*c
+        
+        x = kps_centered[:, :, 0]
+        y = kps_centered[:, :, 1]
+        
+        x_new = x * c[:, None] - y * s[:, None]
+        y_new = x * s[:, None] + y * c[:, None]
+        
+        kps_aligned = np.stack([x_new, y_new], axis=2)
+        return kps_aligned
+
+    def _align_egocentric(self, kps, bodyparts):
+        # Fallback for simple centering if needed, but we replace usage with above
+        return kps - np.nanmean(kps, axis=1, keepdims=True)
+
+    def compute_keypoint_change_score(self, kps, bodyparts):
         """
         Computes Keypoint Change Score matching KPMS exactly:
         1. Egocentric Alignment (Subtract Centroid).
-        2. Gaussian Smoothing (sigma=1).
-        3. Diff (Velocity).
-        4. Norm -> Sum over bodyparts.
+        2. Diff (Velocity). - Input KPS assumed smoothed.
+        3. Norm -> Sum over bodyparts.
         """
         print("Computing KPMS Keypoint Change Score (Aligned)...")
         # 1. Align
         kps_aligned = self._align_egocentric(kps, bodyparts)
         
-        # 2. Smooth
-        kps_smooth = gaussian_filter1d(kps_aligned, sigma=sigma, axis=0)
+        # 2. Smooth - SKIP (Global Smoothing applied)
+        # kps_smooth = gaussian_filter1d(kps_aligned, sigma=sigma, axis=0)
+        kps_smooth = kps_aligned
         
         # 3. Diff (Velocity of aligned structure = Pose Change)
         diff = np.diff(kps_smooth, axis=0, prepend=kps_smooth[:1])
         
-        # 4. Norm & Sum
-        vel_norm = np.linalg.norm(diff, axis=2) # (T, K)
-        total_vel = np.nansum(vel_norm, axis=1) # (T,)
+        # 4. Norm (Strict definition: |yt - yt-1|)
+        # Calculate Euclidean distance of the entire pose vector change
+        diff_flat = diff.reshape(diff.shape[0], -1)
+        total_vel = np.linalg.norm(diff_flat, axis=1) # (T,)
         
         return total_vel
 
-    def compute_kinematics(self, kps, sigma=1.0):
+    def compute_kinematics(self, kps):
         """
         Computes absolute kinematics: Velocity, Acceleration, Jerk.
+        Input kps assumed smoothed.
         """
         print("Computing kinematics (Vel, Acc, Jerk)...")
-        # Smooth keypoints first
-        kps_smooth = gaussian_filter1d(kps, sigma=sigma, axis=0)
+        # Smooth keypoints first - SKIP (Global Smoothing applied)
+        # kps_smooth = gaussian_filter1d(kps, sigma=sigma, axis=0)
+        kps_smooth = kps
         
         # Velocity (1st derivative)
         vel = np.diff(kps_smooth, axis=0, prepend=kps_smooth[:1])
@@ -193,7 +248,7 @@ class PhysicsEngine:
         """
         Computes Mean Magnitude from pre-computed H5 flow (dense), applying the given mask.
         H5 Shape expected: (T, H, W, 2)
-        Kept in Benchmark for light-weight loading of pre-computed results via NumPy.
+        Mask can be 2D (Static ROI) or 3D (Dynamic per-frame).
         """
         print(f"Loading pre-computed Optical Flow from {h5_path}...")
         import h5py
@@ -202,26 +257,45 @@ class PhysicsEngine:
             if 'optical_flow' not in f:
                 raise ValueError("H5 file must contain 'optical_flow' dataset.")
             ds = f['optical_flow'] 
-            n_frames, h, w, c = ds.shape
+            n_frames, h_flow, w_flow, c = ds.shape
             print(f"Flow Shape: {ds.shape}")
             
             magnitudes = []
             
-            for i in tqdm(range(0, n_frames, batch_size), desc="Loading Flow"):
+            # Pre-resize mask if it's 2D to save time
+            is_3d_mask = (mask is not None and mask.ndim == 3)
+            mask_static = None
+            if mask is not None and not is_3d_mask:
+                if mask.shape != (h_flow, w_flow):
+                    mask_static = cv2.resize(mask.astype(np.uint8), (w_flow, h_flow), interpolation=cv2.INTER_NEAREST).astype(bool)
+                else:
+                    mask_static = mask.astype(bool)
+
+            for i in tqdm(range(0, n_frames, batch_size), desc="Processing Flow"):
                 batch = ds[i : i+batch_size] # (B, H, W, 2)
                 mag = np.sqrt(np.sum(batch**2, axis=3)) # (B, H, W)
                 
                 if mask is not None:
-                    # Resize mask if needed
-                    if mask.shape != (h, w):
-                         mask_resized = cv2.resize(mask.astype(np.uint8), (w, h), interpolation=cv2.INTER_NEAREST).astype(bool)
-                    else:
-                         mask_resized = mask.astype(bool)
-                    
-                    # Apply mask and mean
                     batch_means = []
                     for b_idx in range(mag.shape[0]):
-                         batch_means.append(np.mean(mag[b_idx][mask_resized]))
+                        t_idx = i + b_idx
+                        
+                        if is_3d_mask:
+                            # Dynamic Mask: Get specific frame
+                            m_frame = mask[t_idx] if t_idx < len(mask) else mask[-1]
+                            if m_frame.shape != (h_flow, w_flow):
+                                m_frame = cv2.resize(m_frame.astype(np.uint8), (w_flow, h_flow), interpolation=cv2.INTER_NEAREST).astype(bool)
+                            else:
+                                m_frame = m_frame.astype(bool)
+                        else:
+                            # Static Mask: Use pre-resized
+                            m_frame = mask_static
+                        
+                        # Apply mask and mean (handle cases where mask might be empty)
+                        if np.any(m_frame):
+                            batch_means.append(np.mean(mag[b_idx][m_frame]))
+                        else:
+                            batch_means.append(0.0)
                     magnitudes.extend(batch_means)
                 else:
                     magnitudes.extend(np.mean(mag, axis=(1, 2)))

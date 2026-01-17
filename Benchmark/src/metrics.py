@@ -129,11 +129,13 @@ class MetricsEngine:
                 
         return pd.DataFrame(results)
 
-    def get_event_triggered_traces(self, score, labels, window=45, return_peaks=False, filter_by_percentile=None):
+    def get_event_triggered_traces(self, score, labels, window=45, return_peaks=False, filter_by_percentile=None, min_peak_val=None, use_abs_peak=True):
         """
         Extracts traces of 'score' centered around label transitions.
-        If return_peaks=True, returns the Peak Amplitude (max abs value in window) for each event.
+        If return_peaks=True, returns the Peak Amplitude in window.
         filter_by_percentile: If set (e.g. 10), only keeps events where peak amplitude is in top X%.
+        min_peak_val: If set, only keeps events where peak value > min_peak_val.
+        use_abs_peak: If True (default), peak is max(abs(segment)). If False, peak is max(segment).
         """
         from scipy.stats import sem
         y = labels
@@ -154,7 +156,10 @@ class MetricsEngine:
             start, end = t_idx - window, t_idx + window
             if start >= 0 and end < T_score:
                 segment = score[start:end]
-                peak_val = np.max(np.abs(segment))
+                if use_abs_peak:
+                    peak_val = np.max(np.abs(segment))
+                else:
+                    peak_val = np.max(segment) # Signed max (for finding positive residuals)
                 
                 raw_traces.append(segment)
                 raw_peaks.append(peak_val)
@@ -168,23 +173,24 @@ class MetricsEngine:
         raw_peaks = np.array(raw_peaks)
         
         # Filtering Logic
+        mask = np.ones(len(raw_peaks), dtype=bool)
+        
         if filter_by_percentile is not None and filter_by_percentile > 0:
             threshold = np.percentile(raw_peaks, 100 - filter_by_percentile)
-            mask = raw_peaks >= threshold
+            mask &= (raw_peaks >= threshold)
             
-            traces = raw_traces[mask]
-            peaks = raw_peaks[mask]
-            # valid_transitions filtered if needed, but not returned here
-        else:
-            traces = raw_traces
-            peaks = raw_peaks
+        if min_peak_val is not None:
+            mask &= (raw_peaks > min_peak_val)
+            
+        traces = raw_traces[mask]
+        peaks = raw_peaks[mask]
             
         if len(traces) == 0:
              if return_peaks: return None, None, None, None
              return None, None, None
         
         stack = traces # (N_events, Window)
-        mean_trace = np.nanmedian(stack, axis=0) # Use Median for robustness
+        mean_trace = np.nanmean(stack, axis=0) # Use Mean as requested
         sem_trace = sem(stack, axis=0, nan_policy='omit')
         
         if return_peaks:
@@ -268,7 +274,7 @@ class MetricsEngine:
         from sklearn.decomposition import PCA
         
         # PCA needs enough samples > n_components
-        max_samples = 5000
+        max_samples = 10000
         if len(features) > max_samples:
             idx = np.random.choice(len(features), max_samples, replace=False)
             X = features[idx]

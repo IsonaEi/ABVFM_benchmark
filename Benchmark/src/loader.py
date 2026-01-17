@@ -26,18 +26,40 @@ class DataLoader:
             print(f"Error reading Keypoints: {e}")
             return None, None
         
-        scorer = df.columns.levels[0][0]
-        bodyparts = df.columns.levels[1].tolist()
+        if 'individuals' in df.columns.names:
+            # Multi-animal or Single-animal with 'individuals' column
+            scorer = df.columns.levels[0][0]
+            individuals = df.columns.get_level_values('individuals').unique()
+            # Default to first individual (animal0) for benchmark
+            individual = individuals[0]
+            print(f"  Detected 'individuals' column. Using individual: {individual}")
+            
+            # Access: df[scorer][individual] -> columns are now (bodyparts, coords)
+            # Use 'bodyparts' level name if possible, otherwise index 0 of remaining
+            data_df = df[scorer][individual]
+        else:
+             # Standard/Old format: scorer -> bodyparts -> coords
+             scorer = df.columns.levels[0][0]
+             data_df = df[scorer]
+
+        # Get unique bodyparts from the current dataframe level 0
+        bodyparts = data_df.columns.get_level_values(0).unique().tolist()
+        
         kps_list = []
         found_bps = []
         for bp in bodyparts:
             try:
-                x = df[scorer][bp]['x'].values
-                y = df[scorer][bp]['y'].values
+                x = data_df[bp]['x'].values
+                y = data_df[bp]['y'].values
                 kps_list.append(np.stack([x, y], axis=1))
                 found_bps.append(bp)
             except KeyError:
                 continue
+        
+        if not kps_list:
+             print("Warning: No keypoints found in file!")
+             return None, None
+             
         kps = np.stack(kps_list, axis=1) # (T, K, 2)
         print(f"Loaded {kps.shape[0]} frames, {kps.shape[1]} bodyparts.")
         

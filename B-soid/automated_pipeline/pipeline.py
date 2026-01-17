@@ -51,37 +51,10 @@ def convert_h5_to_csv(h5_files, output_dir):
         try:
             df = pd.read_hdf(h5_file)
             
-            # DLC usually has MultiIndex columns: (scorer, bodyparts, coords)
-            # B-SOID expects specific headers: bodyparts (row 0), coords (row 1) in CSV?
-            # Actually B-SOID's `adp_filt` looks for 'likelihood', 'x', 'y' in the *header names* of the CSV
-            # or it parses them.
-            # Let's look at `adp_filt` in `likelihoodprocessing.py` again.
-            # It expects the first row to be headers like 'likelihood', 'x', 'y' if flat?
-            # Or it processes the header from the dataframe.
-            
-            # The B-SOID import function `pd.read_csv` reads it. 
-            # `adp_filt` checks `currdf[0][header] == "likelihood"`... implies it reads a CSV where the first few rows are headers.
-            # DLC default CSV export:
-            # Row 0: Scorer
-            # Row 1: Bodyparts
-            # Row 2: Coords (x, y, likelihood)
-            
-            # We will export to CSV using pandas standard export which preserves the header structure 
-            # if we just save the dataframe. B-SOID seems to handle DLC format.
-            
-            # IMPORTANT: The B-SOID source code `adp_filt` implementation:
-            # currdf = np.array(currdf[1:]) -> drops first row (scorer?)
-            # checks currdf[0][header] -> this would be the Bodyparts row? 
-            # checks if "likelihood" is in it?
-            
-            # Wait, `adp_filt` logic:
-            # currdf = np.array(currdf[1:])  <-- skips row 0 (Scorer)
-            # for header in range(len(currdf[0])): <-- iterating over row 1 (now row 0 in array)
-            #    if currdf[0][header] == "likelihood": ...
-            
-            # DLC H5 loading results in a DataFrame with MultiIndex columns.
-            # When converted to CSV, it usually stacks them.
-            # We need to mimic the CSV structure B-SOID expects.
+            # DLC SuperAnimal/Multi-animal has MultiIndex levels: (scorer, individuals, bodyparts, coords)
+            # B-SOID expects 3 levels: (scorer, bodyparts, coords)
+            if 'individuals' in df.columns.names:
+                df.columns = df.columns.droplevel('individuals')
             
             basename = os.path.splitext(os.path.basename(h5_file))[0]
             csv_path = os.path.join(output_dir, basename + '.csv')

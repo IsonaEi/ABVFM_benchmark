@@ -59,24 +59,31 @@ class NoiseCalibrator:
                 # Read DLC h5 file
                 df = pd.read_hdf(h5_file)
                 # DLC structure: scorer -> bodyparts -> coords (x,y,likelihood)
-                scorer = df.columns.get_level_values(0)[0]
-                bps = df.columns.get_level_values(1).unique()
+                # Detect MultiIndex levels (standard DLC is 3, Multi-animal/Superanimal is 4)
+                levels = df.columns.nlevels
+                if levels == 4:
+                    scorer = df.columns.get_level_values(0)[0]
+                    individual = df.columns.get_level_values(1).unique()[0]
+                    bps = df.columns.get_level_values(2).unique()
+                    def get_col(bp, c): return df[scorer][individual][bp][c].values
+                else:
+                    scorer = df.columns.get_level_values(0)[0]
+                    bps = df.columns.get_level_values(1).unique()
+                    def get_col(bp, c): return df[scorer][bp][c].values
+
                 if not self.bodyparts:
                     self.bodyparts = list(bps)
                 
                 # Extract data
                 video_name = os.path.splitext(os.path.basename(h5_file))[0]
-                # Try to clean up video name to match video file if possible
-                # Often DLC appends scorer name etc.
-                # Heuristic: look for matching video in video_dir
                 
                 coords = []
                 confs = []
                 
                 for bp in self.bodyparts:
-                    x = df[scorer][bp]['x'].values
-                    y = df[scorer][bp]['y'].values
-                    c = df[scorer][bp]['likelihood'].values
+                    x = get_col(bp, 'x')
+                    y = get_col(bp, 'y')
+                    c = get_col(bp, 'likelihood')
                     
                     coords.append(np.stack([x, y], axis=1))
                     confs.append(c)
@@ -124,11 +131,28 @@ class NoiseCalibrator:
         for v in self.confidences.values():
             all_confs.append(v.flatten())
         
-        all_confs = np.concatenate(all_confs) + pseudocount
+        all_confs = np.concatenate(all_confs)
+        # Filter NaNs and invalid negative/zero values (some DLC formats use -1.0 for missing)
+        all_confs = all_confs[~np.isnan(all_confs)]
+        all_confs = all_confs[all_confs > 0] + pseudocount
         
-        # Log-space binning to sample low confidence frames
-        min_conf, max_conf = np.min(all_confs), np.max(all_confs)
-        bins = np.logspace(np.log10(min_conf), np.log10(max_conf), 11)
+        if len(all_confs) == 0:
+            print("Warning: All confidence values are NaN. Using default 0-1 range.")
+            bins = np.linspace(0, 1.1, 11)
+        else:
+            # Log-space binning to sample low confidence frames
+            min_conf, max_conf = np.nanmin(all_confs), np.nanmax(all_confs)
+            print(f"Confidence Range: {min_conf:.6f} to {max_conf:.6f}")
+            
+            if min_conf == max_conf:
+                bins = np.array([min_conf * 0.9, min_conf * 1.1])
+            else:
+                bins = np.logspace(np.log10(min_conf), np.log10(max_conf), 11)
+            
+            # Ensure unique and monotonic
+            bins = np.unique(bins)
+            if len(bins) < 2:
+                bins = np.array([0, 1.1]) # Fallback for near-zero
         
         candidates = []
         # Create candidate list: (video, frame, bodypart_idx)
@@ -136,7 +160,9 @@ class NoiseCalibrator:
             if vid_name not in self.video_paths: continue
             
             n_frames, n_bps = conf_arr.shape
-            for f in range(0, n_frames, 10): # Stride to save time
+            # Stride to save time, but ensure we have enough candidates
+            stride = max(1, n_frames // 1000) 
+            for f in range(0, n_frames, stride): 
                 for b in range(n_bps):
                     c = conf_arr[f, b] + pseudocount
                     candidates.append({
@@ -243,11 +269,13 @@ class NoiseCalibrator:
         slope, intercept = np.polyfit(log_confs, errors, 1)
         
         # Update Config
-        if 'error_estimator' not in self.config:
-            self.config['error_estimator'] = {}
+        if 'model_params' not in self.config:
+            self.config['model_params'] = {}
+        if 'error_estimator' not in self.config['model_params']:
+            self.config['model_params']['error_estimator'] = {}
             
-        self.config['error_estimator']['slope'] = float(slope)
-        self.config['error_estimator']['intercept'] = float(intercept)
+        self.config['model_params']['error_estimator']['slope'] = float(slope)
+        self.config['model_params']['error_estimator']['intercept'] = float(intercept)
         
         # Save config
         with open(self.config_path, 'w') as f:
@@ -328,4 +356,4 @@ if __name__ == "__main__":
         project_dir = sys.argv[1]
         
     app = create_app(project_dir)
-    app.launch(server_name="127.0.0.1", server_port=7860)
+    app.launch(server_name="0.0.0.0", server_port=7860, share=True)

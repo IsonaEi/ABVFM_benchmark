@@ -9,6 +9,7 @@ from datetime import datetime
 import shutil
 import cv2
 import sys
+from scipy.ndimage import gaussian_filter1d # Added import
 
 # Add parent directory to path to allow importing src
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -56,7 +57,7 @@ def main():
     
     # Initialize Modules
     loader = DataLoader(args.config)
-    physics = PhysicsEngine(device='cuda' if not args.skip_gpu else 'cpu')
+    physics = PhysicsEngine()
     metrics = MetricsEngine()
     visualizer = Visualizer(output_dir=result_dir)
     report = ReportGenerator(output_dir=result_dir)
@@ -78,17 +79,23 @@ def main():
     # 3. Physics & Features
     print("\n--- Phase 2: Physics Calculation (Refined) ---")
     
+    # GLOBAL SMOOTHING
+    sigma = config['params']['sigma']
+    print(f"Applying Global Gaussian Smoothing (sigma={sigma})...")
+    from scipy.ndimage import gaussian_filter1d
+    kps_smooth = gaussian_filter1d(kps, sigma=sigma, axis=0)
+    
     # A. KPMS Keypoint Change Score (Aligned)
-    kp_change_score = physics.compute_keypoint_change_score(kps, bodyparts, sigma=config['params']['sigma'])
+    kp_change_score = physics.compute_keypoint_change_score(kps_smooth, bodyparts)
     
     # B. Kinematics (Vel, Acc, Jerk)
-    kinematics = physics.compute_kinematics(kps, sigma=config['params']['sigma'])
+    kinematics = physics.compute_kinematics(kps_smooth)
     
     # C. Morphology
-    morphology = physics.compute_morphology(kps, bodyparts)
+    morphology = physics.compute_morphology(kps_smooth, bodyparts)
     
     # D. Orientation (Relative & Absolute, + Derivatives)
-    orientation = physics.compute_orientation(kps, bodyparts, fps=fps)
+    orientation = physics.compute_orientation(kps_smooth, bodyparts, fps=fps)
     # User Request: Abs of Orientation Features (Magnitude only)
     for k in ['relative_ang_vel', 'relative_ang_acc', 'absolute_ang_vel', 'absolute_ang_acc']:
         if k in orientation:
@@ -111,16 +118,29 @@ def main():
         mask = loader.load_mask(mask_path)
 
     flow_magnitude = None
-    h5_flow_path = config['paths'].get('optical_flow_file')
+    flow_path = config['paths'].get('optical_flow_file')
 
-    if h5_flow_path and os.path.exists(h5_flow_path):
-        print(f"Using pre-computed optical flow from: {h5_flow_path}")
-        flow_magnitude = physics.compute_masked_flow_from_h5(h5_flow_path, mask=mask)
-    else:
-        print("Note: Optical flow file not found or skipped. Residual analysis will be disabled.")
-        print("To generate optical flow, use the separate 'OpticalFlow' sub-project.")
-        
-    # --- Residual Motion Analysis (Motion-Pose Discrepancy) ---
+    if flow_path and os.path.exists(flow_path):
+        if flow_path.endswith('.npy'):
+            print(f"Loading pre-computed magnitude array from: {flow_path}")
+            flow_magnitude = np.load(flow_path)
+        else:
+            print(f"Using pre-computed dense optical flow from: {flow_path}")
+            flow_magnitude = physics.compute_masked_flow_from_h5(flow_path, mask=mask)
+            
+        if flow_magnitude is not None:
+             print("Smoothing Optical Flow (sigma=1.0)...")
+             flow_magnitude = gaussian_filter1d(flow_magnitude, sigma=1.0)
+        if residuals is not None:
+             # User Request: Filter for Positive Residuals (> 0)
+             # skip_zscore=True ensures we plot the actual calculated residuals (Z_diff)
+             collect_trace('Residual Motion', residuals, min_peak_val=0.0, use_abs_peak=False, skip_zscore=True)
+
+    # Plot Grouped Traces
+    print("Generating Feature-wise Trace Plots...")
+    
+    # ... (Rest of plotting logic)
+
     if flow_magnitude is not None and kinematics.get('velocity') is not None:
         min_len = min(len(flow_magnitude), len(kinematics['velocity']))
         of_slice = flow_magnitude[:min_len]
@@ -174,14 +194,17 @@ def main():
         pass
     
     # --- Add Random Baseline (Sanity Check) ---
-    print("Generating Random Baseline...")
-    n_random_classes = 10 # Default to 10 classes
+    print("Generating Random Baseline (16 Classes, Long Tail)...")
+    n_random_classes = 16 
     total_frames = len(dino_features)
     random_labels = []
     current_frame = 0
     
-    # User Spec: Median ~0.4s (12 frames@30fps). Distribution: "Between Linear and Exponential"
-    # We use Exponential but clipped to [1, 300] (10s), with mean chosen to get median=12.
+    # Target Probabilities (Long Tail: 1/n distribution)
+    weights = 1.0 / (np.arange(n_random_classes) + 1.0)
+    p_dist = weights / weights.sum()
+    
+    # User Spec: Median ~0.4s (12 frames@30fps).
     # Median of Exp(scale) = ln(2)*scale => 12 = 0.693*scale => scale ~ 17.3
     target_median_frames = int(0.4 * fps)
     scale = target_median_frames / np.log(2) 
@@ -192,10 +215,11 @@ def main():
         # Clip: Max 10s (300 frames), Min 1 frame
         run_len = max(1, min(run_len, int(10 * fps))) 
         
-        # Pick random class (different from previous if possible)
-        label = np.random.randint(0, n_random_classes)
+        # Pick random class with Long Tail distribution
+        label = np.random.choice(n_random_classes, p=p_dist)
         if random_labels and len(random_labels) > 0 and random_labels[-1] == label:
-             label = (label + 1) % n_random_classes
+             # Just pick another one if it repeats (optional for long tail but keeps boundaries clear)
+             label = np.random.choice(n_random_classes, p=p_dist)
              
         # Add to list
         # Don't overflow total
@@ -241,6 +265,8 @@ def main():
         ssi_window = int(0.4 * fps)
         ssi = metrics.compute_ssi(dino_features, labels, window=ssi_window)
         ssi_results[method_name] = ssi
+        
+        # Calculate Mean (For logging, the subtraction happens in visualizer)
         stats['mean_ssi'] = np.mean(ssi) if ssi else 0
         stats['median_ssi'] = np.median(ssi) if ssi else 0
         
@@ -261,9 +287,13 @@ def main():
         # D. Event Triggered Traces (Collection by Feature)
         peak_amplitudes[method_name] = {}
         
-        def collect_trace(key, data, filter_percentile=None):
-             z_data = metrics.compute_zscore(data)
-             m, s, _, peaks = metrics.get_event_triggered_traces(z_data, labels, return_peaks=True, filter_by_percentile=filter_percentile)
+        def collect_trace(key, data, filter_percentile=None, skip_zscore=False, **kwargs):
+             if skip_zscore:
+                 z_data = data 
+             else:
+                 z_data = metrics.compute_zscore(data)
+                 
+             m, s, _, peaks = metrics.get_event_triggered_traces(z_data, labels, return_peaks=True, filter_by_percentile=filter_percentile, **kwargs)
              if m is not None: 
                  if key not in grouped_traces: grouped_traces[key] = {}
                  grouped_traces[key][method_name] = {'mean': m, 'sem': s}
@@ -291,19 +321,21 @@ def main():
              collect_trace('OpticalFlow', flow_magnitude)
         
         if residuals is not None:
-             # User Request: Top 1% Filter, Rename
-             collect_trace('Residual Motion', residuals, filter_percentile=1)
+             # User Request: Single Z-Scored Residual Plot (Standardized View)
+             # use_abs_peak=False: Positive residuals only
+             # skip_zscore=False: Apply Z-Scoring to the residuals themselves
+             collect_trace('Residual Motion', residuals, min_peak_val=0.0, use_abs_peak=False, skip_zscore=False)
 
     # Plot Grouped Traces
     print("Generating Feature-wise Trace Plots...")
     for feat_name, m_data in grouped_traces.items():
         # Clean up feature name for filename
-        fname_safe = feat_name.replace(" ", "")
+        fname_safe = feat_name.replace(" ", "").replace("(", "").replace(")", "")
         
         # User Request: Specific Title/Label for Residual Motion
         if feat_name == 'Residual Motion':
-             title = "Event-Triggered: Residual Motion (Flow vs Skeleton Gap - Top 1%)"
-             ylabel = "Z-Score (Gap Magnitude)"
+             title = "Event-Triggered: Residual Motion (Z-Score | Pos > 0)"
+             ylabel = "Z-Score (of Residuals)"
         else:
              title = f"Event-Triggered: {feat_name} (Z-Scored) [Abs]" if 'Ang' in feat_name else f"Event-Triggered: {feat_name} (Z-Scored)"
              ylabel = "Z-Score"
@@ -335,8 +367,13 @@ def main():
     # Embedding Analysis
     if dino_features is not None:
          print("\n--- Phase 3.5: Embedding Analysis ---")
-         T_kps = kps.shape[0]
-         kps_flat = kps.reshape(T_kps, -1)
+         
+         # Apply Alignment (Center + Rotate) for PCA
+         kps_aligned = physics.align_keypoints_egocentric(kps, bodyparts)
+         
+         T_kps = kps_aligned.shape[0]
+         kps_flat = kps_aligned.reshape(T_kps, -1)
+         
          min_len = min(len(dino_features), len(kps_flat))
          X_dino = dino_features[:min_len]
          X_kps = kps_flat[:min_len]
@@ -344,13 +381,15 @@ def main():
          # Reconstruction
          r2_dino_kps = metrics.compute_reconstruction_score(X_dino, X_kps)
          r2_kps_dino = metrics.compute_reconstruction_score(X_kps, X_dino)
+
+         # Random Baselines (Chance Level via Shuffling)
+         print("Calculating Reconstruction Chance Levels (Shuffle Test)...")
+         # Shuffle the associations
+         X_shuff = X_dino.copy()
+         np.random.shuffle(X_shuff)
          
-         # Random Baselines (Chance Level)
-         print("Calculating Reconstruction Chance Levels...")
-         X_rand_dino = np.random.randn(*X_dino.shape)
-         X_rand_kps = np.random.randn(*X_kps.shape)
-         r2_rand_kps = metrics.compute_reconstruction_score(X_rand_dino, X_kps)
-         r2_rand_dino = metrics.compute_reconstruction_score(X_rand_kps, X_dino)
+         r2_rand_kps = metrics.compute_reconstruction_score(X_shuff, X_kps)
+         r2_rand_dino = metrics.compute_reconstruction_score(X_kps, X_shuff) # Symmetric check
          
          visualizer.plot_reconstruction_scores(
              {
@@ -384,26 +423,26 @@ def main():
     visualizer.plot_ethogram_and_durations(methods_data, fps, filename_suffix="fig3_style")
     report.add_image(os.path.join(result_dir, "benchmark_fig3_style.png"), "Ethograms")
     
-    # SSI
+    # SSI Comparison (Difference from Random Mean)
     random_mean_ssi = None
     if 'Random' in ssi_results:
          random_mean_ssi = np.mean(ssi_results['Random'])
          
-    visualizer.plot_violin_comparison(ssi_results, "SSI Distribution", "SSI", "ssi_comparison.png", baseline_mean=random_mean_ssi)
-    report.add_image(os.path.join(result_dir, "ssi_comparison.png"), "SSI")
+    visualizer.plot_violin_comparison(ssi_results, "SSI Distribution (Relative to Random)", "Δ SSI from Chance", "ssi_comparison.png", baseline_mean=random_mean_ssi)
+    report.add_image(os.path.join(result_dir, "ssi_comparison.png"), "State Stability Index (SSI)")
+
+    # Killer Case Scatter (Residual Motion)
+    if flow_magnitude is not None and kinematics.get('velocity') is not None:
+         visualizer.plot_residual_scatter(z_of, z_sv, residuals, "residual_scatter.png")
+         report.add_image(os.path.join(result_dir, "residual_scatter.png"), "Motion Gap Analysis (Optical Flow vs Skeleton)")
     
-    # SSI
-    visualizer.plot_violin_comparison(ssi_results, "SSI Distribution", "SSI", "ssi_comparison.png")
-    report.add_image(os.path.join(result_dir, "ssi_comparison.png"), "SSI")
-    
-    # Confusion Matrices (Pairwise)
     print("\n--- Phase 4.5: Confusion Matrices ---")
-    from sklearn.metrics import confusion_matrix
+    from sklearn.metrics import confusion_matrix, adjusted_rand_score, normalized_mutual_info_score
     import itertools
     
     if len(methods_data) >= 2:
-        report.add_section("Comparison Matrices", "Pairwise comparison of label assignments (Row-Normalized).")
-        for m1, m2 in itertools.combinations(methods_data, 2):
+        report.add_section("Comparison Matrices (Row-Normalized)", "Pairwise conditional probability matrices. Rows sum to 1. Shows P(Column_Label | Row_Label).")
+        for m1, m2 in itertools.permutations(methods_data, 2):
             name1, labels1 = m1['name'], m1['labels']
             name2, labels2 = m2['name'], m2['labels']
             
@@ -413,15 +452,26 @@ def main():
             l2 = labels2[:L]
             
             # Compute Contingency Table (MxN)
-            # Use pandas crosstab to avoid union-of-labels square matrix issue
+            # User Request: Include ALL classes (no filtering)
             ct = pd.crosstab(l1, l2)
+            
+            if ct.empty:
+                print(f"Skipping Confusion Matrix {name1} vs {name2}: Empty.")
+                continue
+
             cm = ct.values
             classes1 = ct.index.to_numpy()
             classes2 = ct.columns.to_numpy()
             
-            filename = f"confusion_{name1}_vs_{name2}.png"
-            visualizer.plot_sorted_confusion_matrix(cm, classes1, classes2, name1, name2, filename)
-            report.add_image(os.path.join(result_dir, filename), f"P({name2} | {name1})")
+            # Calculate Metrics (NMI)
+            # Use raw filtered labels for metric calculation to be accurate
+            nmi = normalized_mutual_info_score(l1, l2)
+            
+            # Row Normalized Confusion Matrix (Hungarian Aligned, Linear Scale)
+            # Visualize P(Col | Row)
+            filename = f"confusion_Row_{name1}_vs_Col_{name2}.png"
+            visualizer.plot_aligned_confusion_matrix(cm, classes1, classes2, name1, name2, filename, nmi=nmi, normalize=True)
+            report.add_image(os.path.join(result_dir, filename), f"Reference: {name1} (Row-Normalized) -> {name2} [NMI={nmi:.3f}]")
 
     # Stats Table
     stats_df = pd.DataFrame(stats_list)

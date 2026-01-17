@@ -34,8 +34,7 @@ def infer_heading_indices(bodyparts):
 
 def calculate_latent_dim(pca, target_variance=0.9):
     """
-    Calculate number of components using the rule:
-    max(components for 90% variance, n_keypoints / 2)
+    Calculate number of components using target variance or explicit count.
     """
     # 1. Variance-based count
     explained_var = np.cumsum(pca.explained_variance_ratio_)
@@ -45,21 +44,10 @@ def calculate_latent_dim(pca, target_variance=0.9):
     else:
         var_dim = np.argmax(explained_var >= target_variance) + 1
         
-    # 2. Keypoints-based count
-    # pca.n_features_in_ is typically (n_bodyparts * 2) or (n_bodyparts * 3)
-    # We assume 2D keypoints mainly
-    n_input_features = pca.n_features_in_
-    n_keypoints = n_input_features // 2 
-    
-    # Requirement: at least half of keypoints count
-    # e.g., 8 keypoints -> min 4 components
-    min_dim = int(np.ceil(n_keypoints / 2))
-    
-    final_dim = max(var_dim, min_dim)
+    final_dim = var_dim
     
     logger.info(f"Latent Dim Calculation:")
-    logger.info(f"  - Variance ({target_variance}): {var_dim} components")
-    logger.info(f"  - Min Constraint (nPts/2): {min_dim} components (from {n_keypoints} points)")
+    logger.info(f"  - Target Variance ({target_variance}): {var_dim} components")
     logger.info(f"  > Final Selection: {final_dim}")
     
     return int(final_dim)
